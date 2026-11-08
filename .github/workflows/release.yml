@@ -1,0 +1,48 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install wasm-opt (binaryen)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
+      - name: Build
+        run: scripts/release.sh "${GITHUB_REF_NAME}"
+
+      - name: Fixture gate (must pass before publishing)
+        run: node test/run.mjs fixtures
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/dexvm_bridge.wasm
+            dexvm-host.js
+            dist/SHA256SUMS
+            dist/BUILDINFO
+          body: |
+            `dexvm_bridge.wasm` + `dexvm-host.js` for **${{ github.ref_name }}**.
+
+            Pin both files by the SHA-256 in `SHA256SUMS`; the loader and the
+            wasm binary must be updated together (the ABI is versioned with the
+            release tag).
+
+            Compatibility: see `COMPAT.md` in the repository.

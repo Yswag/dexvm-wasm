@@ -1,0 +1,107 @@
+[package]
+name = "dexvm"
+version = "0.2.0"
+edition = "2021"
+description = "Minimal DEX (Dalvik bytecode) VM runtime in Rust, embeddable as a library and tuned for mihon/Tachiyomi (keiyoushi) manga extensions"
+keywords = ["dex", "dalvik", "android", "vm", "mihon"]
+categories = ["embedded", "virtualization", "parser-implementations"]
+repository = "https://github.com/tachibana-shin/dexvm"
+readme = "README.md"
+license = "Apache-2.0"
+
+[features]
+default = ["java", "kotlin", "injekt", "jsoup", "android", "okhttp", "tachiyomi", "quickjs"]
+# Java standard library host shims (java.*)
+java = []
+# Kotlin stdlib host shims (kotlin.*)
+kotlin = []
+# koan / injekt DI shims (injekt.*)
+injekt = []
+# org.jsoup host shims (parsed via dom_query)
+jsoup = ["dep:dom_query"]
+# host shim classes for the Android framework (android.*)
+android = ["dep:png", "dep:zune-png", "dep:zune-jpeg", "dep:raqote"]
+# host shim classes for OkHttp (okhttp3.*)
+okhttp = []
+# app.cash.quickjs host shims (real QuickJS via rquickjs)
+quickjs = ["dep:rquickjs"]
+# host shim classes for the mihon extension API (eu.kanade.tachiyomi.source.*)
+tachiyomi = []
+# compat alias: full mihon/keiyoushi source pipeline (the `keiyoushi` bridge)
+keiyoushi = ["tachiyomi", "kotlin", "injekt", "jsoup", "android", "okhttp", "quickjs"]
+
+[lib]
+name = "dexvm"
+
+[[bin]]
+name = "dexcli"
+path = "src/bin/dexcli.rs"
+
+[[test]]
+name = "keiyoushi_e2e"
+required-features = ["keiyoushi"]
+
+[[test]]
+name = "api_smoke"
+required-features = ["keiyoushi"]
+
+[[test]]
+name = "live_keiyoushi"
+required-features = ["keiyoushi"]
+
+[[test]]
+name = "live_moetruyen"
+required-features = ["keiyoushi"]
+
+[[test]]
+name = "keiyoushi_flow"
+required-features = ["keiyoushi"]
+
+[[test]]
+name = "moetruyen_decrypt"
+required-features = ["keiyoushi"]
+
+[[test]]
+name = "live_moetruyen_net"
+required-features = ["keiyoushi"]
+
+[[test]]
+name = "moetruyen_filters"
+required-features = ["keiyoushi"]
+
+[[test]]
+name = "zz_probe"
+required-features = ["keiyoushi"]
+
+[[test]]
+name = "injekt_scan"
+required-features = ["injekt"]
+
+[dependencies]
+fancy-regex = "0.19.0"
+zip = "8.6.0"
+dom_query = { version = "0.28.0", optional = true }
+md-5 = "0.11.0"
+sha1 = "0.11.0"
+sha2 = "0.11.0"
+hmac = "0.13.0"
+pbkdf2 = "0.13.0"
+miniz_oxide = "0.8"
+aes = "0.8"
+base64 = "0.22"
+aes-gcm = "0.11.0"
+log = "0.4"
+png = { version = "0.17", optional = true }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+rquickjs = { version = "0.12.2", optional = true }
+zune-png = { version = "0.5.2", default-features = false, optional = true }
+zune-jpeg = { version = "0.5.15", default-features = false, optional = true }
+raqote = { version = "0.8.5", optional = true }
+num-bigint = "0.5.1"
+num-traits = "0.2.19"
+unicode-normalization = "0.1.25"
+
+[dev-dependencies]
+aes-gcm = "0.11.0"
+ureq = { version = "3.4.0", features = ["cookies"] }
+env_logger = "0.11"

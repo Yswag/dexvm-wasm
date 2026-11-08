@@ -1,0 +1,60 @@
+(node:2704) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///root/work/dexvm/dexvm-host.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /root/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ok   tachiyomi-en.mangapill-v1.4.9.apk        open 412ms  MangaPill/en/id=8448310129093543312
+ok   tachiyomi-all.comicfury-v1.4.8.apk       open 159ms  Comic Fury/all/id=5182817189941556265, Comic Fury/en/id=6251704791239468278, Comic Fury/es/id=4984634867953711392, Comic Fury/pt-BR/id=8655141799625656041, Comic Fury/de/id=7464199493988606175, Comic Fury/fr/id=2880365189708146138, Comic Fury/it/id=4412608991854703246, Comic Fury/pl/id=7974978914502436971, Comic Fury/ja/id=8819952928004218630, Comic Fury/zh/id=6187036261988654925, Comic Fury/ru/id=2995199135797572970, Comic Fury/fi/id=6411256237640188165, Comic Fury/other/id=501810935334397655, Comic Fury (No Text)/other/id=2537678488019181229
+ok   tachiyomi-all.akuma-v1.4.10.apk          open 100ms  Akuma/all/id=1843646695111412994, Akuma/en/id=8524619729907384865, Akuma/id/id=1707768678643970514, Akuma/jv/id=3825200464570758229, Akuma/ca/id=186393818771246102, Akuma/ceb/id=5014742859693294263, Akuma/cs/id=3989593922015638091, Akuma/da/id=5988433661218368889, Akuma/de/id=8524245811050879736, Akuma/et/id=8167173986295647123, Akuma/es/id=5371778608318819884, Akuma/eo/id=77326570497325152, Akuma/fr/id=9222445553932717105, Akuma/it/id=5085561039221748061, Akuma/hi/id=1099564256126272699, Akuma/hu/id=1422819830508615430, Akuma/nl/id=5610655855358487221, Akuma/pl/id=8163761313345392776, Akuma/pt/id=5253884715906393116, Akuma/vi/id=1740877429814102450, Akuma/tr/id=2760962895634785428, Akuma/ru/id=7045343433771927648, Akuma/uk/id=5229751861519354976, Akuma/ar/id=8600626646399125374, Akuma/ko/id=8353987132172753017, Akuma/zh/id=7558912456429140642, Akuma/ja/id=5330127039501257395
+ok   tachiyomi-vi.cuutruyenmoe-v1.6.3.apk     open 91ms  CuuTruyen (unoriginal)/vi/id=3973269831131863421
+ok   tachiyomi-vi.moetruyen-v1.6.8.apk        open 109ms  MoeTruyen/vi/id=8689080191405841403
+
+== tachiyomi-en.mangapill-v1.4.9.apk  cold-start(open+sources) 77ms (open 72ms)
+ok   MangaPill (en)                 10 mangas  405 ch  24 pg img 260462B image/jpeg 8054.5ms
+   cold-start measured: 72ms (without sources call)
+
+== tachiyomi-all.comicfury-v1.4.8.apk  cold-start(open+sources) 140ms (open 64ms)
+ok   Comic Fury (all)               30 mangas  392 ch   1 pg img 988598B image/png 29607.8ms
+ok   Comic Fury (en)                30 mangas  392 ch   1 pg img 988598B image/png 28740.1ms
+ok   Comic Fury (es)                30 mangas  285 ch   1 pg img 510818B image/jpeg 18376ms
+ok   Comic Fury (pt-BR)             30 mangas  276 ch   1 pg img 2276462B image/png 30949.2ms
+ok   Comic Fury (de)                30 mangas  109 ch   1 pg img 1809557B image/png 22080.3ms
+ok   Comic Fury (fr)                30 mangas  817 ch   1 pg img 1058488B image/jpeg 38703.4ms
+FAIL Comic Fury (it)                30 mangas    - ch   - pg  17754.6ms  <- no chapters/pages in the first 3 mangas
+ok   Comic Fury (pl)                30 mangas   16 ch   1 pg img 1085567B image/jpeg 10256.1ms
+ok   Comic Fury (ja)                28 mangas   89 ch   4 pg img 230450B image/png 12175.7ms
+ok   Comic Fury (zh)                20 mangas   68 ch   1 pg img 441190B image/png 31112.4ms
+ok   Comic Fury (ru)                30 mangas    2 ch   1 pg img 255649B image/png 13550.5ms
+ok   Comic Fury (fi)                30 mangas  150 ch   1 pg img 323084B image/jpeg 41015ms
+ok   Comic Fury (other)             30 mangas   26 ch   1 pg img 3059636B image/png 17560.7ms
+ok   Comic Fury (No Text) (other)   30 mangas   63 ch   1 pg img 1295236B image/png 16082.2ms
+   cold-start measured: 64ms (without sources call)
+index entries: 1556
+picked: Baozi Manhua [zh], ManHuaGui [zh], Dm5 [zh], Komiic [zh], MangaPill [en], ComicK Fanmade [en], Asura Scans [en], Weeb Central [en], Comic Fury [all], AHottie [all] 
+
+FAIL 包子漫画 (zh)                       - mangas    - ch   - pg  457.8ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;) [fallback: uncaught java.io.IOException: HTTP 0]
+FAIL 漫画柜 (zh)                        - mangas    - ch   - pg  8.2ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;) [fallback: resolution error: no method iterator (
+FAIL 动漫屋 (zh)                        - mangas    - ch   - pg  1351.5ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;) [fallback: uncaught java.io.IOException: HTTP 0]
+FAIL Komiic (zh)                     - mangas    - ch   - pg  40.8ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;) [fallback: resolution error: no static field Defa
+FAIL MangaPill (en)                  - mangas    - ch   - pg  3026.4ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;) [fallback: uncaught java.io.IOException: HTTP 0]
+FAIL ComicK Fanmade (en)             - mangas    - ch   - pg  22419.6ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;) [fallback: uncaught java.io.IOException: HTTP 0]
+FAIL Asura Scans (en)                - mangas    - ch   - pg  1006.4ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;) [fallback: uncaught java.io.IOException: HTTP 0]
+FAIL Weeb Central (en)               - mangas    - ch   - pg  1835.6ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;) [fallback: uncaught java.io.IOException: HTTP 0]
+FAIL Comic Fury (all)                - mangas    - ch   - pg  335.8ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Le0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (en)                 - mangas    - ch   - pg  339.8ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lf0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (es)                 - mangas    - ch   - pg  340.3ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lg0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (pt-BR)              - mangas    - ch   - pg  352.6ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lh0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (de)                 - mangas    - ch   - pg  340.5ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Li0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (fr)                 - mangas    - ch   - pg  339ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lj0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (it)                 - mangas    - ch   - pg  339.7ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lk0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (pl)                 - mangas    - ch   - pg  352.9ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Ll0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (ja)                 - mangas    - ch   - pg  351.1ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lm0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (zh)                 - mangas    - ch   - pg  347.1ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lz; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/f
+FAIL Comic Fury (ru)                 - mangas    - ch   - pg  349.8ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on La0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (fi)                 - mangas    - ch   - pg  357.1ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lb0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (other)              - mangas    - ch   - pg  349.5ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lc0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL Comic Fury (No Text) (other)    - mangas    - ch   - pg  379.3ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Ld0; starting from Ljava/lang/Object;) [fallback: resolution error: no method parseCaseInsensitive ()Ljava/time/
+FAIL AHottie (all)                   - mangas    - ch   - pg  3515.2ms  <- resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;) [fallback: uncaught java.io.IOException: HTTP 0]
+
+http requests: 185, bytes: 22.2 MiB
+total: 379.6s
+rows written to /tmp/dexvm-run/result.json (38 rows)

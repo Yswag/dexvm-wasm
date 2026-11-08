@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install wasm-opt (binaryen)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
+      - name: Build wasm
+        run: scripts/build.sh
+
+      - name: Smoke test (open + sources + filters on 5 fixture APKs)
+        run: node test/smoke.mjs && node test/run.mjs fixtures
+
+      - name: Upload wasm (build artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dexvm-bridge-wasm
+          path: |
+            dist/dexvm_bridge.wasm
+            dexvm-host.js
+          retention-days: 14

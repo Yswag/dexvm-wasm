@@ -1,0 +1,9 @@
+dexvm-wasm
+Copyright 2026 dexvm-wasm contributors
+
+This product includes software developed at
+dexvm (https://github.com/tachibana-shin/dexvm), licensed under
+the Apache License, Version 2.0.
+
+The vendored copy under vendor/dexvm/ is unmodified except for
+Cargo.toml (see patches/dexvm-0.2.0-cargo.patch).

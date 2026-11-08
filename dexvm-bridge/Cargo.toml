@@ -1,0 +1,29 @@
+[package]
+name = "dexvm-bridge"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+dexvm = { path = "../vendor/dexvm", default-features = false, features = [
+    "java",
+    "kotlin",
+    "injekt",
+    "jsoup",
+    "android",
+    "okhttp",
+    "tachiyomi",
+    "keiyoushi",
+] }
+serde_json = { version = "1", features = ["preserve_order"] }
+base64 = "0.22"
+log = "0.4"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"

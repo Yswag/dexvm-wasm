@@ -1,0 +1,44 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -51,7 +51,6 @@
+     "android",
+     "okhttp",
+     "tachiyomi",
+-    "quickjs",
+ ]
+ injekt = []
+ java = []
+@@ -63,11 +62,9 @@
+     "jsoup",
+     "android",
+     "okhttp",
+-    "quickjs",
+ ]
+ kotlin = []
+ okhttp = []
+-quickjs = ["dep:rquickjs"]
+ tachiyomi = []
+ 
+ [lib]
+@@ -200,11 +197,8 @@
+ [dependencies.raqote]
+ version = "0.8.5"
+ optional = true
++default-features = false
+ 
+-[dependencies.rquickjs]
+-version = "0.12.2"
+-optional = true
+-
+ [dependencies.serde_json]
+ version = "1.0.151"
+ features = ["preserve_order"]
+@@ -220,6 +214,8 @@
+ 
+ [dependencies.zip]
+ version = "8.6.0"
++default-features = false
++features = ["deflate"]
+ 
+ [dependencies.zune-jpeg]
+ version = "0.5.15"
