@@ -932,6 +932,8 @@ pub(crate) fn java_equals(vm: &mut Vm, a: JValue, b: JValue) -> Result<bool, Nat
         (JValue::Long(x), JValue::Long(y)) => x == y,
         (JValue::Float(x), JValue::Float(y)) => x.to_bits() == y.to_bits(),
         (JValue::Double(x), JValue::Double(y)) => x.to_bits() == y.to_bits(),
+        // wasm: primitives have no receiver to dispatch `equals` on.
+        (a, b) if !matches!(a, JValue::Obj(_)) || !matches!(b, JValue::Obj(_)) => false,
         (a, b) => match inv_virt(vm, a, "equals", "(Ljava/lang/Object;)Z", &[b]) {
             Ok(JValue::Int(i)) => i != 0,
             _ => false,

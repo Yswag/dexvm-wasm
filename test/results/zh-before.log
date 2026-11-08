@@ -1,0 +1,43 @@
+########## tachiyomi-zh.komiic-v1.6.11
+open 518ms  eu.kanade.tachiyomi.extension.zh.komiic v1.6.11
+sources: 0:Komiic/zh
+
+=== [0] Komiic (zh) id=792932060924485302 base=https://komiic.com
+FAILED after 181ms: resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;)  [fallback: resolution error: no static field Default Lkotlinx/serialization/json/Json$Default; in Lkotlinx/serialization/json/Json;]
+########## tachiyomi-zh.baozimanhua-v1.6.33
+open 522ms  eu.kanade.tachiyomi.extension.zh.baozimanhua v1.6.33
+sources: 0:包子漫画/zh
+
+=== [0] 包子漫画 (zh) id=5724751873601868259 base=https://cn.baozimh.com
+[http 1] GET https://cn.baozimh.com/classify?page=1  headers: Cache-Control
+         -> 403  109 B  "{\"challenge_url\":\"/__gatekeeper_challenge/start?return=%2Fcl"
+FAILED after 1363ms: wasm trapped (unreachable); the instance is unusable
+file:///var/minis/workspace/dexvm-wasm/dexvm-host.js:251
+    if (trapped) throw new DexvmError({ kind: 'trap', message: 'instance already trapped' });
+                       ^
+
+DexvmError: instance already trapped
+    at Object.call (file:///var/minis/workspace/dexvm-wasm/dexvm-host.js:251:24)
+    at file:///var/minis/workspace/dexvm-wasm/test/debug.mjs:100:4 {
+  kind: 'trap',
+  javaStack: undefined,
+  raw: { kind: 'trap', message: 'instance already trapped' }
+}
+
+Node.js v22.15.1
+########## tachiyomi-zh.manhuagui-v1.6.1
+open 601ms  eu.kanade.tachiyomi.extension.zh.manhuagui v1.6.1
+sources: 0:漫画柜/zh
+
+=== [0] 漫画柜 (zh) id=7057750772596492765 base=https://www.manhuagui.com
+FAILED after 55ms: resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;)  [fallback: resolution error: no method iterator ()Ljava/util/Iterator; found (on Lkotlin/ranges/IntRange; starting from Ljava/lang/Object;)]
+########## tachiyomi-zh.dm5-v1.6.3
+open 635ms  eu.kanade.tachiyomi.extension.zh.dm5 v1.6.3
+sources: 0:动漫屋/zh
+
+=== [0] 动漫屋 (zh) id=293789630396851172 base=https://www.dm5.com
+[wasm 3] dexvm::vm::native::android: CookieManager has no cookie store on the headless host
+[wasm 3] dexvm::vm::native::android: CookieManager has no cookie store on the headless host
+[http 1] GET https://www.dm5.com/manhua-list-p1/  headers: Cache-Control,Cookie
+         -> 200  147648 B  "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//E"
+FAILED after 3734ms: resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;)  [fallback: uncaught java.lang.NullPointerException: ]

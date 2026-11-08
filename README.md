@@ -182,6 +182,12 @@ Two natives are registered from the bridge (`dexvm-bridge/src/shims.rs`):
 `app.cash.quickjs.QuickJs` replacement. `compile`/`execute` (QuickJS bytecode)
 return `null`.
 
+The fork also carries small shim additions needed by ext-lib 1.6 sources —
+kotlinx.serialization singletons (`Json.Default`, `JsonElementSerializer`,
+`EnumSerializer.serialize`), `IntRange.iterator`, `DateTimeFormatter.parseCaseInsensitive`,
+jsoup relative/`:contains` selectors, and non-panicking value access in
+`payload_of`/`str_of_jvalue`. Every edit site is marked `// wasm:`.
+
 ## Verification
 
 Corpus: 5 APKs from the upstream crate. All open and list sources; ids, langs

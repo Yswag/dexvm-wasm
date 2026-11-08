@@ -15,7 +15,7 @@ Raw output: `test/results/all.log`.
 
 | Generation | State | Missing |
 |---|---|---|
-| ext-lib **1.6.x** (current repo builds) | ❌ fails at `popular` | `Json.Default` static field, `DateTimeFormatter.parseCaseInsensitive()`, some `Collection.iterator()` paths; multiple sources also NPE while parsing |
+| ext-lib **1.6.x** (current repo builds) | ⚠️ partial — see below | kotlinx.serialization coverage, jsoup/DOM edge cases, site-side challenges |
 | ext-lib 1.4.x | ✅ works | — (Mihon 0.21 is the last major release supporting 1.4, and the repo stopped publishing it in 2026-10) |
 | ext-lib 1.5.x | untested | no APKs on hand |
 
@@ -33,3 +33,21 @@ works".
 * Target size: 10–30 sources actually in use. Steady-state cost ≈ 1–2 h/month.
 * No work is required between releases; upstream churn does not affect pinned
   artifacts.
+
+### 1.6.x progress (2026-11-09)
+
+Work in progress; each row is `popular → details → chapters → pages`.
+
+| Source | popular | details | chapters | pages | Blocked by |
+|---|---|---|---|---|---|
+| 动漫屋 dm5 (zh) | ✅ 70 | ✅ | ✅ 227 | ✅ 69 | — |
+| Komiic (zh) | ✅ 30 | ❌ | — | — | `class not found: I` inside details deserialization |
+| 漫画柜 manhuagui (zh) | ✅ 42 | ✅ | ✅ 235 | ❌ | the extension's JS-packer unpacker emits a malformed JSON string (VM string-op bug) |
+| 包子漫画 baozimanhua (zh) | ❌ | — | — | — | site gatekeeper returns 403 before any parse |
+
+Vendor shims added for 1.6 (see `vendor/dexvm`, marked `// wasm:`):
+`Json.Default` singleton + inheritance, `JsonElementSerializer` (+`INSTANCE`),
+`EnumSerializer.serialize`, `IntRange.iterator`, `DateTimeFormatter.parseCaseInsensitive`,
+`Jsoup.parse(InputStream,…)`, relative selectors (`"> ul"`), `:contains/​:containsData`,
+non-panicking `payload_of`/`str_of_jvalue`, primitive-safe `Intrinsics.areEqual`,
+and native-dispatch diagnostics.

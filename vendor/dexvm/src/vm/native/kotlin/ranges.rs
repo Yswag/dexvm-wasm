@@ -11,6 +11,20 @@ pub(super) fn rangeskt_until(vm: &mut Vm, args: &[JValue]) -> R {
     )
 }
 
+/// wasm: `IntRange.iterator()` — a fresh IntIterator over the same bounds.
+/// `nextInt`/`hasNext` already treat the IntRange payload as the cursor.
+pub(super) fn int_range_iterator(vm: &mut Vm, args: &[JValue]) -> R {
+    let (first, last) = match payload(vm, args[0]) {
+        Some(Native::IntRange(f, l)) => (*f, *l),
+        _ => return Err(npe(vm)),
+    };
+    alloc(
+        vm,
+        "Lkotlin/collections/IntIterator;",
+        Native::IntRange(first, last),
+    )
+}
+
 pub(super) fn int_range_init(vm: &mut Vm, args: &[JValue]) -> R {
     let first = int_of(vm, args[1]);
     let last = int_of(vm, args[2]);
@@ -498,6 +512,20 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(II)Lkotlin/ranges/IntRange;",
         false,
         rangeskt_until
+    ),
+    ne!(
+        "Lkotlin/ranges/IntRange;",
+        "iterator",
+        "()Ljava/util/Iterator;",
+        true,
+        int_range_iterator
+    ),
+    ne!(
+        "Lkotlin/ranges/IntRange;",
+        "iterator",
+        "()Lkotlin/collections/IntIterator;",
+        true,
+        int_range_iterator
     ),
     ne!(
         "Lkotlin/collections/IntIterator;",

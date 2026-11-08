@@ -1,0 +1,14 @@
+##### tachiyomi-zh.komiic-v1.6.11
+popular: 30 mangas, hasNext=true (1770ms)
+FAILED after 2174ms: resolution error: invoke_on mangaDetailsParse(Lokhttp3/Response;)Leu/kanade/tachiyomi/source/model/SManga;: resolution error: no method mangaDetailsParse (Lokhttp3/Response;)Leu/kanade/tachiyomi/source/model/SManga; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;)  [fallback: resolution error: class not found: I]
+##### tachiyomi-zh.manhuagui-v1.6.1
+popular: 42 mangas, hasNext=true (1318ms)
+  chapters: 235
+FAILED after 12500ms: resolution error: invoke_on pageListParse(Lokhttp3/Response;)Ljava/util/List;: resolution error: no method pageListParse (Lokhttp3/Response;)Ljava/util/List; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;)  [fallback: resolution error: json: expected , or } at byte 57 got Some(122)]
+##### tachiyomi-zh.dm5-v1.6.3
+popular: 70 mangas, hasNext=true (3179ms)
+  chapters: 227
+  pages: 69
+  imageUrl: https://manhua1041zjcdn79.cdndm5.com/86/85227/1853782/2_4970.jpg?cid=1853782&key
+##### tachiyomi-zh.baozimanhua-v1.6.33
+FAILED after 1352ms: resolution error: invoke_on popularMangaRequest(I)Lokhttp3/Request;: resolution error: no method popularMangaRequest (I)Lokhttp3/Request; found (on Lkeiyoushi/source/Generated; starting from Ljava/lang/Object;)  [fallback: uncaught java.io.IOException: HTTP 403]

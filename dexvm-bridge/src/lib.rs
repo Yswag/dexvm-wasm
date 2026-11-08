@@ -93,7 +93,8 @@ fn install_panic_hook() {
                 .location()
                 .map(|l| format!("{}:{}", l.file(), l.line()))
                 .unwrap_or_default();
-            host::log_line(4, &format!("dexvm panic at {loc}: {msg}"));
+            let native = dexvm::vm::current_native_label().unwrap_or_else(|| "-".into());
+            host::log_line(4, &format!("dexvm panic in native [{native}] at {loc}: {msg}"));
         }));
     });
 }

@@ -543,6 +543,16 @@ fn op_open(req: &Value) -> R<Value> {
         .decode(b64)
         .map_err(|e| err("bad_args", format!("apkBase64 is not valid base64: {e}")))?;
     crate::install_host_logger();
+    // Optional per-open log level (0..4 = trace..error); default is warnings.
+    if let Some(lvl) = req.get("logLevel").and_then(|v| v.as_u64()) {
+        log::set_max_level(match lvl {
+            0 => log::LevelFilter::Trace,
+            1 => log::LevelFilter::Debug,
+            2 => log::LevelFilter::Info,
+            3 => log::LevelFilter::Warn,
+            _ => log::LevelFilter::Error,
+        });
+    }
     let mut k = Keiyoushi::new(&data).map_err(|e| err("load", format!("cannot load extension: {e}")))?;
     k.set_http(on_http);
     // Bridge-side extras (Jsoup InputStream overload, quickjs replacement).

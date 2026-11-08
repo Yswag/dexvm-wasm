@@ -39,7 +39,8 @@ fn stream_bytes(vm: &Vm, v: JValue) -> Result<Vec<u8>, NatErr> {
 fn jsoup_parse_stream(vm: &mut Vm, args: &[JValue]) -> Result<JValue, NatErr> {
     let bytes = stream_bytes(vm, args[0])?;
     let html = String::from_utf8_lossy(&bytes).into_owned();
-    let base = if args.len() > 1 {
+    // Extensions commonly pass a null baseUri/charset; treat those as "".
+    let base = if args.len() > 1 && vm.payload_of(args[1]).is_some() {
         args[1]
     } else {
         vm.alloc_string("")

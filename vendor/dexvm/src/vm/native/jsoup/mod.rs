@@ -111,7 +111,65 @@ fn node_ref_of<'a>(doc: &'a Document, id: NodeId) -> NodeRef<'a> {
 
 /// jsoup element().select: includes the node itself when it matches
 /// (mirroring rakuyomi's compatibility layer).
-fn select_matches(_doc: &Document, root: NodeRef, selector: &str) -> Vec<NodeId> {
+/// wasm: jsoup accepts selectors relative to an element (`container.select("> ul")`).
+/// dom_query treats a leading combinator as invalid, so handle that shape by
+/// matching the element's direct children.
+fn select_relative_children(root: NodeRef, selector: &str) -> Option<Vec<NodeId>> {
+    let rest = selector.trim_start().strip_prefix('>')?.trim();
+    if rest.is_empty() {
+        return Some(Vec::new());
+    }
+    let Some(matcher) = select_selector(rest) else {
+        return Some(Vec::new());
+    };
+    let mut out = Vec::new();
+    for child in root.children() {
+        if matcher.match_element(&child) {
+            out.push(child.id);
+        }
+    }
+    Some(out)
+}
+
+/// wasm: jsoup's `:contains(text)` / `:containsData(text)` pseudo-selectors are
+/// not supported by the CSS engine. Split them off and filter afterwards.
+fn split_contains(selector: &str) -> (String, Option<String>) {
+    for marker in [":containsData(", ":containsOwn(", ":contains("] {
+        if let Some(pos) = selector.find(marker) {
+            let start = pos + marker.len();
+            if let Some(end_rel) = selector[start..].find(')') {
+                let raw = &selector[start..start + end_rel];
+                let needle = raw.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
+                let rest = &selector[start + end_rel + 1..];
+                let base = format!("{}{}", selector[..pos].trim(), rest.trim());
+                let base = if base.trim().is_empty() { "*".to_string() } else { base };
+                return (base, Some(needle));
+            }
+        }
+    }
+    (selector.to_string(), None)
+}
+
+fn node_text_contains(doc: &Document, id: NodeId, needle: &str) -> bool {
+    NodeRef::new(id, &doc.tree)
+        .text()
+        .to_string()
+        .contains(needle)
+}
+
+fn select_matches(doc: &Document, root: NodeRef, selector: &str) -> Vec<NodeId> {
+    let (selector, needle) = split_contains(selector);
+    let mut ids = select_matches_inner(root, &selector);
+    if let Some(needle) = needle {
+        ids.retain(|id| node_text_contains(doc, *id, &needle));
+    }
+    ids
+}
+
+fn select_matches_inner(root: NodeRef, selector: &str) -> Vec<NodeId> {
+    if let Some(ids) = select_relative_children(root, selector) {
+        return ids;
+    }
     let Some(matcher) = select_selector(selector) else {
         return Vec::new();
     };
@@ -302,6 +360,18 @@ fn select_first_at(vm: &mut Vm, doc: JsoupDocRef, node: NodeId, selector: &str) 
     let out_id = {
         let d = &*doc.doc;
         let node_ref = NodeRef::new(node, &d.tree);
+        let (base, needle) = split_contains(selector);
+        if needle.is_some() || base.trim_start().starts_with('>') {
+            let ids = select_matches(d, node_ref, selector);
+            return match ids.first() {
+                Some(id) => alloc(
+                    vm,
+                    "Lorg/jsoup/nodes/Element;",
+                    Native::JsoupElement { doc, id: *id },
+                ),
+                None => Ok(JValue::Null),
+            };
+        }
         let Some(matcher) = select_selector(selector) else {
             return Ok(JValue::Null);
         };

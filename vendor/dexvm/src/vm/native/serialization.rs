@@ -781,8 +781,14 @@ pub(crate) fn json_decode_from_string(vm: &mut Vm, args: &[JValue]) -> R {
         eprintln!("DEXVM_TRACE native json_decode_from_string");
     }
     let text = jstr(vm, args[2])?;
-    let val =
-        parse_json(&text).map_err(|e| nat_fatal(JvmError::Resolution(format!("json: {e}"))))?;
+    let val = parse_json(&text).map_err(|e| {
+        // wasm: show the input excerpt; the parser is stricter than kotlinx.
+        log::warn!(
+            "json decode failed: {e} :: input={:?}",
+            text.chars().take(200).collect::<String>()
+        );
+        nat_fatal(JvmError::Resolution(format!("json: {e}")))
+    })?;
     let module = json_module_of(vm, args[0]);
     let node = alloc_json_node(vm, &val)?;
     run_serializer(vm, args[1], node, module)
@@ -841,6 +847,18 @@ pub(crate) fn json_element_companion_serializer(vm: &mut Vm, _args: &[JValue]) -
 }
 
 /// Lazy materializer for the `JsonElement.Companion` static field.
+/// wasm: `kotlinx.serialization.json.Json.Default` singleton. 1.6-era
+/// extensions read it as a static field before calling encode/decode; the
+/// instance itself is opaque (the Json* natives above do the work).
+pub(crate) fn lazy_json_default(vm: &mut Vm) -> JValue {
+    alloc(
+        vm,
+        "Lkotlinx/serialization/json/Json$Default;",
+        Native::Opaque,
+    )
+    .unwrap_or(JValue::Null)
+}
+
 pub(crate) fn lazy_json_element_companion(vm: &mut Vm) -> JValue {
     alloc(
         vm,
@@ -1794,12 +1812,13 @@ fn string_serializer_of(vm: &mut Vm, _args: &[JValue]) -> R {
 
 /// `EnumsKt.createSimpleEnumSerializer` / `createAnnotatedEnumSerializer`.
 fn enum_serializer_create(vm: &mut Vm, args: &[JValue]) -> R {
-    let values = match payload(vm, args[1]) {
+    // wasm: some callers pass fewer arguments than the annotated signature.
+    let values = match args.get(1).and_then(|v| payload(vm, *v)) {
         Some(Native::Array(ArrayData::Obj(values))) => values.clone(),
         _ => Vec::new(),
     };
     let mut names = Vec::with_capacity(values.len());
-    if let Some(Native::Array(ArrayData::Obj(ser_names))) = payload(vm, args[2]) {
+    if let Some(Native::Array(ArrayData::Obj(ser_names))) = args.get(2).and_then(|v| payload(vm, *v)) {
         let ser_names = ser_names.clone();
         for n in ser_names {
             names.push(jstr(vm, n).unwrap_or_default());
@@ -1823,6 +1842,63 @@ fn enum_serializer_create(vm: &mut Vm, args: &[JValue]) -> R {
 
 /// `EnumSerializer.deserialize(decoder)` — maps the JSON string value to the
 /// enum constant via its serial name.
+/// wasm: the `JsonElementSerializer` object instance (Kotlin `object`).
+pub(crate) fn lazy_json_element_serializer(vm: &mut Vm) -> JValue {
+    alloc(
+        vm,
+        "Lkotlinx/serialization/json/JsonElementSerializer;",
+        Native::Opaque,
+    )
+    .unwrap_or(JValue::Null)
+}
+
+/// wasm: `JsonElementSerializer` — pass the element through unchanged.
+fn json_element_serializer_deserialize(vm: &mut Vm, args: &[JValue]) -> R {
+    match payload(vm, args[1]) {
+        Some(Native::JsonDecoder { element, .. }) => Ok(*element),
+        _ => Err(npe(vm)),
+    }
+}
+
+fn json_element_serializer_serialize(vm: &mut Vm, args: &[JValue]) -> R {
+    let value = args.get(1).copied().unwrap_or(JValue::Null);
+    // StreamingJsonEncoder.encodeJsonElement(JsonElement)
+    let _ = inv_virt(
+        vm,
+        args[0],
+        "encodeJsonElement",
+        "(Lkotlinx/serialization/json/JsonElement;)V",
+        &[value],
+    );
+    Ok(JValue::Null)
+}
+
+/// wasm: `EnumSerializer.serialize(encoder, value)` — writes the enum's serial
+/// name as a string, mirroring `deserialize`.
+fn enum_serializer_serialize(vm: &mut Vm, args: &[JValue]) -> R {
+    let (values, names) = match payload(vm, args[0]) {
+        Some(Native::EnumSerializer { values, names }) => (values.clone(), names.clone()),
+        _ => return Err(npe(vm)),
+    };
+    let value = args.get(2).copied().unwrap_or(JValue::Null);
+    let idx = values.iter().position(|v| match (v, value) {
+        (JValue::Obj(a), JValue::Obj(b)) => *a == b,
+        (a, b) => *a == b,
+    });
+    let name = idx
+        .and_then(|i| names.get(i).cloned())
+        .unwrap_or_default();
+    let name_obj = new_str(vm, &name);
+    inv_virt(
+        vm,
+        args[1],
+        "encodeString",
+        "(Ljava/lang/String;)V",
+        &[name_obj],
+    )?;
+    Ok(JValue::Null)
+}
+
 fn enum_serializer_deserialize(vm: &mut Vm, args: &[JValue]) -> R {
     let (values, names) = match payload(vm, args[0]) {
         Some(Native::EnumSerializer { values, names }) => (values.clone(), names.clone()),
@@ -2753,6 +2829,9 @@ pub(crate) const SERIALIZATION_TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/serialization/SealedClassSerializer;", "<init>", "(Ljava/lang/String;Lkotlin/reflect/KClass;[Lkotlin/reflect/KClass;[Lkotlinx/serialization/KSerializer;[Ljava/lang/annotation/Annotation;)V", true, serializer_opaque_init),
     ne!("Lkotlinx/serialization/internal/ObjectSerializer;", "<init>", "(Ljava/lang/String;Ljava/lang/Object;[Ljava/lang/annotation/Annotation;)V", true, serializer_opaque_init),
     ne!("Lkotlinx/serialization/internal/EnumsKt;", "createSimpleEnumSerializer", "(Ljava/lang/String;[Ljava/lang/Enum;)Lkotlinx/serialization/KSerializer;", false, enum_serializer_create),
+    ne!("Lkotlinx/serialization/json/JsonElementSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Lkotlinx/serialization/json/JsonElement;", true, json_element_serializer_deserialize),
+    ne!("Lkotlinx/serialization/json/JsonElementSerializer;", "serialize", "(Lkotlinx/serialization/encoding/Encoder;Lkotlinx/serialization/json/JsonElement;)V", true, json_element_serializer_serialize),
+    ne!("Lkotlinx/serialization/internal/EnumSerializer;", "serialize", "(Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V", true, enum_serializer_serialize),
     ne!("Lkotlinx/serialization/internal/EnumSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, enum_serializer_deserialize),
     ne!("Lkotlinx/serialization/internal/EnumSerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, enum_serializer_descriptor),
     ne!("Lkotlinx/serialization/internal/EnumsKt;", "createAnnotatedEnumSerializer", "(Ljava/lang/String;[Ljava/lang/Enum;[Ljava/lang/String;[[Ljava/lang/annotation/Annotation;[Ljava/lang/annotation/Annotation;)Lkotlinx/serialization/KSerializer;", false, enum_serializer_create),

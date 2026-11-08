@@ -23,6 +23,12 @@ pub(crate) fn dtf_tostring(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(new_str(vm, &pattern))
 }
 
+/// wasm: `parseCaseInsensitive()` is a no-op for the ASCII, fixed-pattern
+/// formatter — return `this` so callers can chain.
+pub(crate) fn dtf_parse_case_insensitive(_vm: &mut Vm, args: &[JValue]) -> R {
+    Ok(args[0])
+}
+
 /// `withLocale` doesn't affect this simplified (ASCII, fixed-pattern)
 /// formatter — returns `this` for chaining.
 pub(crate) fn dtf_with_locale(_vm: &mut Vm, args: &[JValue]) -> R {
@@ -96,6 +102,13 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(Ljava/lang/String;Ljava/util/Locale;)Ljava/time/format/DateTimeFormatter;",
         false,
         dtf_of_pattern
+    ),
+    ne!(
+        "Ljava/time/format/DateTimeFormatter;",
+        "parseCaseInsensitive",
+        "()Ljava/time/format/DateTimeFormatter;",
+        true,
+        dtf_parse_case_insensitive
     ),
     ne!(
         "Ljava/time/format/DateTimeFormatter;",

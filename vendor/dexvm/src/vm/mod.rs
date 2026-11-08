@@ -33,6 +33,25 @@ pub enum NatErr {
 /// Native bridge signature. `args` includes the receiver for instance methods.
 pub type NativeFn = fn(&mut Vm, &[JValue]) -> Result<JValue, NatErr>;
 
+// wasm: debug aid. Panics cannot be caught on wasm, so the label of the shim
+// that was executing is kept where a panic hook can read it.
+thread_local! {
+    static CURRENT_NATIVE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+pub fn current_native_label() -> Option<String> {
+    CURRENT_NATIVE.with(|c| c.borrow().clone())
+}
+
+pub fn set_current_native_pub(label: Option<String>) {
+    set_current_native(label)
+}
+
+fn set_current_native(label: Option<String>) {
+    CURRENT_NATIVE.with(|c| *c.borrow_mut() = label);
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct NativeEntry {
     pub class: &'static str,
@@ -1267,11 +1286,11 @@ impl Vm {
 
     /// String payload of a java.lang.String value, if any.
     pub fn str_of_jvalue(&self, v: JValue) -> Option<String> {
-        if v.is_null() {
+        // wasm: see payload_of.
+        let JValue::Obj(id) = v else {
             return None;
-        }
-        let id = v.as_obj();
-        match &self.arena.objects[id as usize].native {
+        };
+        match self.arena.objects.get(id as usize).and_then(|o| o.native.as_ref()) {
             Some(object::Native::Str(s)) => Some(s.clone()),
             _ => None,
         }
@@ -1279,11 +1298,12 @@ impl Vm {
 
     /// Owned payload for a non-null object value.
     pub fn payload_of(&self, v: JValue) -> Option<object::Native> {
-        if v.is_null() {
+        // wasm: never panic on a non-reference value; callers treat this as
+        // "no payload" and raise a Java exception if they need one.
+        let JValue::Obj(id) = v else {
             return None;
-        }
-        let id = v.as_obj();
-        self.arena.objects[id as usize].native.clone()
+        };
+        self.arena.objects.get(id as usize).and_then(|o| o.native.clone())
     }
 
     /// Resolved class id for a non-null object value.
@@ -1311,10 +1331,45 @@ impl Vm {
                     .natives
                     .get(&key)
                     .ok_or_else(|| JvmError::Fatal(format!("no native for {key:?}")))?;
+                let trace = log::log_enabled!(log::Level::Debug);
+                if trace {
+                    set_current_native(Some(format!(
+                        "{}.{}{}",
+                        crate::vm::value::dotted_name(self.str_of(key.0)),
+                        self.str_of(key.1),
+                        self.str_of(key.2)
+                    )));
+                }
                 match f(self, &args) {
-                    Ok(v) => Ok(v),
-                    Err(NatErr::Throw(ex)) => Err(JvmError::Uncaught(ex)),
-                    Err(NatErr::Fatal(e)) => Err(e),
+                    Ok(v) => {
+                        if trace {
+                            set_current_native(None);
+                        }
+                        Ok(v)
+                    }
+                    Err(err) => {
+                        // wasm: name the shim that failed; the Java-side
+                        // message is often empty (e.g. NullPointerException).
+                        if log::log_enabled!(log::Level::Debug) {
+                            log::debug!(
+                                "native {} . {}{} failed: {}",
+                                crate::vm::value::dotted_name(self.str_of(key.0)),
+                                self.str_of(key.1),
+                                self.str_of(key.2),
+                                match &err {
+                                    NatErr::Throw(_) => "threw a Java exception".to_string(),
+                                    NatErr::Fatal(e) => e.to_string(),
+                                }
+                            );
+                        }
+                        if trace {
+                            set_current_native(None);
+                        }
+                        match err {
+                            NatErr::Throw(ex) => Err(JvmError::Uncaught(ex)),
+                            NatErr::Fatal(e) => Err(e),
+                        }
+                    }
                 }
             }
             Target::Bytecode { class, slot, .. } => {

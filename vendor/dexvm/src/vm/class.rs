@@ -1924,7 +1924,13 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         "Lkotlinx/serialization/json/Json;",
         Some("Ljava/lang/Object;"),
         &["Ljava/io/Serializable;"],
-        0
+        0,
+        // wasm: 1.6-era extensions reference `Json.Default` directly.
+        [sdef!(
+            "Default",
+            "Lkotlinx/serialization/json/Json$Default;",
+            ShimValue::Lazy(native::lazy_json_default)
+        )]
     ),
     #[cfg(feature = "tachiyomi")]
     shim!(
@@ -3364,8 +3370,23 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     ),
     #[cfg(feature = "tachiyomi")]
     shim!(
-        "Lkotlinx/serialization/json/Json$Default;",
+        // wasm: serializer object used by 1.6-era kotlinx serialization code.
+        "Lkotlinx/serialization/json/JsonElementSerializer;",
         Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Lkotlinx/serialization/json/JsonElementSerializer;",
+            ShimValue::Lazy(native::lazy_json_element_serializer)
+        )]
+    ),
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        // wasm: 1.6-era code calls Json methods through `Json.Default`, so the
+        // singleton must inherit from Json, not Object.
+        "Lkotlinx/serialization/json/Json$Default;",
+        Some("Lkotlinx/serialization/json/Json;"),
         &[],
         0
     ),

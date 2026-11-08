@@ -354,7 +354,34 @@ impl Vm {
                                         ri += 1;
                                     }
                                 }
-                                match nf(self, &call_args) {
+                                let native_trace = log::log_enabled!(log::Level::Debug);
+                                if native_trace {
+                                    crate::vm::set_current_native_pub(Some(format!(
+                                        "{}.{}{}",
+                                        crate::vm::value::dotted_name(self.str_of(key.0)),
+                                        self.str_of(key.1),
+                                        self.str_of(key.2)
+                                    )));
+                                }
+                                let native_result = nf(self, &call_args);
+                                if native_trace {
+                                    crate::vm::set_current_native_pub(None);
+                                }
+                                if log::log_enabled!(log::Level::Debug) {
+                                    if let Err(err) = &native_result {
+                                        log::debug!(
+                                            "native {} . {}{} failed: {}",
+                                            crate::vm::value::dotted_name(self.str_of(key.0)),
+                                            self.str_of(key.1),
+                                            self.str_of(key.2),
+                                            match err {
+                                                NatErr::Throw(_) => "threw a Java exception".to_string(),
+                                                NatErr::Fatal(e) => e.to_string(),
+                                            }
+                                        );
+                                    }
+                                }
+                                match native_result {
                                     Ok(v) => {
                                         // <init> natives conventionally
                                         // return a freshly allocated object;
