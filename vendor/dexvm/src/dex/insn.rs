@@ -285,7 +285,7 @@ pub fn decode(insns: &[u16], pc: usize) -> Result<(Insn, usize), DexError> {
         0x1d => Ok((Insn::MonitorEnter(a8), pc + 1)),
         0x1e => Ok((Insn::MonitorExit(a8), pc + 1)),
         0x1f => Ok((Insn::CheckCast(a8, u32::from(w1()?)), pc + 2)),
-        0x20 => Ok((Insn::InstanceOf(a4, b4, u32::from(w1()? & 0xff)), pc + 2)),
+        0x20 => Ok((Insn::InstanceOf(a4, b4, u32::from(w1()?)), pc + 2)),
         0x21 => Ok((Insn::ArrayLength(a4, b4), pc + 1)),
         0x22 => Ok((Insn::NewInstance(a8, u32::from(w1()?)), pc + 2)),
         0x23 => Ok((Insn::NewArray(a4, b4, u32::from(w1()?)), pc + 2)),
@@ -986,9 +986,19 @@ mod tests {
     }
 
     #[test]
-    fn arrays() {
-        assert_eq!(dec(&[0x23 | (1 << 12), 0x4], 0), Insn::NewArray(0, 1, 4));
+    fn instance_of_keeps_full_type_index() {
+        // 22c: instance-of v4, v3, type@0x0103 — type indices above 0xff are
+        // common in obfuscated 1.6-era extensions; truncating to 8 bits made
+        // the VM resolve primitive "I" and fail with "class not found: I".
         assert_eq!(
+            dec(&[0x20 | (4 << 8) | (3 << 12), 0x0103], 0),
+            Insn::InstanceOf(4, 3, 0x0103)
+        );
+    }
+
+    #[test]
+    fn arrays() {
+        assert_eq!(dec(&[0x23 | (1 << 12), 0x4], 0), Insn::NewArray(0, 1, 4));        assert_eq!(
             dec(&[0x44, (1 & 0xff) | (2 << 8)], 0),
             Insn::AGet(ArrayElem::Int, 0, 1, 2)
         );

@@ -2652,7 +2652,19 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         0
     ),
     #[cfg(feature = "kotlin")]
-    shim!("Lkotlin/time/Instant;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        // wasm: 1.6-era code reads `Instant.Companion` as a static field
+        // before calling parse()/parseOrNull().
+        "Lkotlin/time/Instant;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [sdef!(
+            "Companion",
+            "Lkotlin/time/Instant$Companion;",
+            ShimValue::Lazy(native::lazy_instant_companion)
+        )]
+    ),
     #[cfg(feature = "kotlin")]
     shim!(
         "Lkotlin/time/jdk8/InstantConversionsJDK8Kt;",
@@ -3814,6 +3826,56 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     shim!("Ljava/util/UUID;", Some("Ljava/lang/Object;"), &[], 0),
     shim!("Ljava/math/BigDecimal;", Some("Ljava/lang/Object;"), &[], 0),
     shim!("Ljava/math/BigInteger;", Some("Ljava/lang/Object;"), &[], 0),
+    // wasm: 1.6-era sources read RoundingMode enum constants before calling
+    // BigDecimal.setScale(int, RoundingMode); the native ignores the mode.
+    shim!(
+        "Ljava/math/RoundingMode;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [
+            sdef!(
+                "UP",
+                "Ljava/math/RoundingMode;",
+                ShimValue::Lazy(native::lazy_rounding_mode)
+            ),
+            sdef!(
+                "DOWN",
+                "Ljava/math/RoundingMode;",
+                ShimValue::Lazy(native::lazy_rounding_mode)
+            ),
+            sdef!(
+                "CEILING",
+                "Ljava/math/RoundingMode;",
+                ShimValue::Lazy(native::lazy_rounding_mode)
+            ),
+            sdef!(
+                "FLOOR",
+                "Ljava/math/RoundingMode;",
+                ShimValue::Lazy(native::lazy_rounding_mode)
+            ),
+            sdef!(
+                "HALF_UP",
+                "Ljava/math/RoundingMode;",
+                ShimValue::Lazy(native::lazy_rounding_mode)
+            ),
+            sdef!(
+                "HALF_DOWN",
+                "Ljava/math/RoundingMode;",
+                ShimValue::Lazy(native::lazy_rounding_mode)
+            ),
+            sdef!(
+                "HALF_EVEN",
+                "Ljava/math/RoundingMode;",
+                ShimValue::Lazy(native::lazy_rounding_mode)
+            ),
+            sdef!(
+                "UNNECESSARY",
+                "Ljava/math/RoundingMode;",
+                ShimValue::Lazy(native::lazy_rounding_mode)
+            ),
+        ]
+    ),
     shim!(
         "Ljava/lang/ref/SoftReference;",
         Some("Ljava/lang/Object;"),

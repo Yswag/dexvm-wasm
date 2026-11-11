@@ -4,17 +4,19 @@
 // answered by a *synchronous* curl call (execFileSync) — the wasm side never
 // touches the network, and no SharedArrayBuffer/Atomics are involved.
 //
-//   node test/run.mjs fixtures       # 5 apks in fixtures/: open + sources + filters
+//   node test/run.mjs fixtures       # every apk in fixtures/: open + sources
 //   node test/run.mjs live           # en.mangapill + all.comicfury full flow
+//   node test/run.mjs 1.6            # full flow for every ext-lib 1.6 fixture
 //   node test/run.mjs index          # 10 popular sources from keiyoushi index
 //   node test/run.mjs all            # everything, prints the result table
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createDexvm } from '../dexvm-host.js';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 function findWasm() {
   if (process.env.DEXVM_WASM) return process.env.DEXVM_WASM;
   const candidates = [
@@ -68,18 +70,27 @@ function storeCookies(url, lines) {
 let httpCount = 0;
 let httpBytes = 0;
 
+// Sites disagree on this: MangaPill only serves its list to a mobile UA,
+// while dm5/manhuagui redirect a mobile UA away from the pages the extension
+// parses. Each mode picks a default; DEXVM_UA overrides both.
+const MOBILE_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+const DESKTOP_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+let defaultUa = process.env.DEXVM_UA || MOBILE_UA;
+
 function syncHttp(reqJson) {
   const req = JSON.parse(reqJson);
   httpCount++;
   const id = `${process.pid}-${httpCount}`;
   const bodyFile = path.join(WORK, `body-${id}.bin`);
   const hdrFile = path.join(WORK, `hdr-${id}.txt`);
-  const args = ['-sS', '--max-time', '60', '-D', hdrFile, '-o', bodyFile];
+  const args = ['-sS', '--max-time', '60', '-D', hdrFile, '-o', bodyFile, '-w', '%{http_code}'];
   const method = (req.method || 'GET').toUpperCase();
   if (method !== 'GET') args.push('-X', method);
   const headers = [...(req.headers || [])];
   const hasUA = headers.some(([k]) => k.toLowerCase() === 'user-agent');
-  if (!hasUA) headers.push(['User-Agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1']);
+  if (!hasUA) headers.push(['User-Agent', defaultUa]);
   const ck = cookieHeader(req.url);
   if (ck && !headers.some(([k]) => k.toLowerCase() === 'cookie')) headers.push(['Cookie', ck]);
   for (const [k, v] of headers) args.push('-H', `${k}: ${v}`);
@@ -227,7 +238,20 @@ const FIXTURE_APKS = [
   'tachiyomi-all.akuma-v1.4.10.apk',
   'tachiyomi-vi.cuutruyenmoe-v1.6.3.apk',
   'tachiyomi-vi.moetruyen-v1.6.8.apk',
-];
+  'tachiyomi-en.mangapill-v1.6.1.apk',
+  'tachiyomi-en.comickfan-v1.6.4.apk',
+  'tachiyomi-en.asurascans-v1.6.72.apk',
+  'tachiyomi-en.weebcentral-v1.6.27.apk',
+  'tachiyomi-zh.dm5-v1.6.4.apk',
+  'tachiyomi-zh.komiic-v1.6.11.apk',
+  'tachiyomi-zh.manhuagui-v1.6.1.apk',
+  'tachiyomi-zh.baozimanhua-v1.6.33.apk',
+  // ext-lib 1.6: these are the versions the keiyoushi repo currently publishes.
+  'tachiyomi-vi.cuutruyenmoe-v1.6.3.apk',
+  'tachiyomi-vi.moetruyen-v1.6.8.apk',
+].filter((v, i, a) => a.indexOf(v) === i);
+
+const APKS_16 = FIXTURE_APKS.filter((apk) => !apk.includes('-v1.4.') && !apk.includes('-v1.5.'));
 
 async function modeFixtures() {
   const vm = await newVm();
@@ -260,6 +284,7 @@ async function modeFixtures() {
 }
 
 async function modeLive() {
+  defaultUa = process.env.DEXVM_UA || MOBILE_UA;
   const vm = await newVm();
   for (const apk of ['tachiyomi-en.mangapill-v1.4.9.apk', 'tachiyomi-all.comicfury-v1.4.8.apk']) {
     const t0 = performance.now();
@@ -276,7 +301,34 @@ async function modeLive() {
   }
 }
 
+async function modeFlows(apks, { img = true } = {}) {
+  defaultUa = process.env.DEXVM_UA || DESKTOP_UA;
+  const vm = await newVm();
+  const results = [];
+  for (const apk of apks) {
+    const p = path.join(FIXTURES, apk);
+    if (!fs.existsSync(p)) {
+      record({ name: apk, error: 'fixture missing' });
+      continue;
+    }
+    console.log(`\n== ${apk}`);
+    const t = performance.now();
+    try {
+      const opened = await openApk(vm, p);
+      const sources = vm.call('sources', { handle: opened.handle });
+      for (const s of sources) results.push(await runSource(vm, opened.handle, s, { img }));
+      vm.call('close', { handle: opened.handle });
+    } catch (e) {
+      record({ name: apk, error: short(e) });
+      results.push({ name: apk, error: short(e) });
+    }
+    console.log(`   ${apk}: ${ms(t)}ms`);
+  }
+  return results;
+}
+
 async function modeIndex(limit = 10) {
+  defaultUa = process.env.DEXVM_UA || DESKTOP_UA;
   const listPath = path.join(WORK, 'index.html');
   if (!fs.existsSync(listPath)) {
     console.log('downloading keiyoushi listing…');
@@ -359,6 +411,7 @@ async function main() {
   const summary = {};
   if (mode === 'fixtures' || mode === 'all') summary.fixtures = await modeFixtures();
   if (mode === 'live' || mode === 'all') await modeLive();
+  if (mode === '1.6' || mode === 'all') summary.flows16 = await modeFlows(APKS_16);
   if (mode === 'index' || mode === 'all') summary.index = await modeIndex();
   console.log(`\nhttp requests: ${httpCount}, bytes: ${(httpBytes / 1024 / 1024).toFixed(1)} MiB`);
   console.log(`total: ${(ms(started) / 1000).toFixed(1)}s`);

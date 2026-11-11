@@ -41,6 +41,7 @@ pub(crate) use statics::{
 pub(crate) use support::opaque_inst;
 pub(crate) use support::TABLE as SUPPORT_TABLE;
 pub(crate) use text::*;
+pub(crate) use time::lazy_instant_companion;
 pub(crate) use time::TABLE as TIME_TABLE;
 pub(crate) use tuples::TABLE as TUPLES_TABLE;
 pub(crate) use unsigned::TABLE as UNSIGNED_TABLE;

@@ -241,12 +241,18 @@ impl Vm {
             let step = match self.step(&mut f) {
                 Ok(s) => s,
                 Err(e) => {
+                    let idx = f
+                        .decoded
+                        .units
+                        .binary_search(&(f.err_pc as u32))
+                        .unwrap_or_else(|i| i.saturating_sub(1));
                     debug!(
-                        "ERR {} pc={:#06x} class={} method={}: {e}",
+                        "ERR {} pc={:#06x} class={} method={} insn={:?}: {e}",
                         self.str_of(self.classes[f.class as usize].descriptor),
                         f.pc,
                         self.class_desc_str(f.class),
                         self.str_of(self.classes[f.class as usize].methods[f.slot as usize].name),
+                        f.decoded.insns.get(idx),
                     );
                     return Err(e);
                 }
@@ -805,7 +811,9 @@ impl Vm {
                 Flow::Next(0)
             }
             Insn::ConstHigh16(d, lit) => {
-                f.regs[*d as usize] = JValue::Int(lit.wrapping_shl(16));
+                // wasm: the decoder already applies the << 16, so shifting
+                // again here wrapped every const/high16 value to 0.
+                f.regs[*d as usize] = JValue::Int(*lit);
                 Flow::Next(0)
             }
             Insn::ConstWide16(d, lit) | Insn::ConstWide32(d, lit) => {
@@ -817,7 +825,8 @@ impl Vm {
                 Flow::Next(0)
             }
             Insn::ConstWideHigh16(d, lit) => {
-                f.regs[*d as usize] = JValue::Long(i64::from(lit.wrapping_shl(16) as u32) << 32);
+                // wasm: decoder already applied the << 48.
+                f.regs[*d as usize] = JValue::Long(*lit);
                 Flow::Next(0)
             }
             Insn::ConstString(d, str_idx) | Insn::ConstStringJumbo(d, str_idx) => {
@@ -1518,6 +1527,16 @@ fn f2l(x: f64) -> i64 {
 
 fn binop(vm: &mut Vm, op: Binop, a: JValue, b: JValue) -> Result<JValue, u32> {
     let div_zero = |vm: &mut Vm| vm.err_arithmetic("/ by zero");
+    // wasm: DEX registers are untyped, so float/double literals loaded with
+    // const/const-wide arrive as Int/Long bit patterns. When the other operand
+    // is already a Float/Double, reinterpret the literal so arithmetic works.
+    let (a, b) = match (a, b) {
+        (JValue::Long(x), d @ JValue::Double(_)) => (JValue::Double(f64::from_bits(x as u64)), d),
+        (d @ JValue::Double(_), JValue::Long(y)) => (d, JValue::Double(f64::from_bits(y as u64))),
+        (JValue::Int(x), f @ JValue::Float(_)) => (JValue::Float(f32::from_bits(x as u32)), f),
+        (f @ JValue::Float(_), JValue::Int(y)) => (f, JValue::Float(f32::from_bits(y as u32))),
+        (a, b) => (a, b),
+    };
     match (op, a, b) {
         // int
         (Binop::Add, JValue::Int(x), JValue::Int(y)) => Ok(JValue::Int(x.wrapping_add(y))),
@@ -1591,6 +1610,11 @@ fn binop(vm: &mut Vm, op: Binop, a: JValue, b: JValue) -> Result<JValue, u32> {
         (Binop::Mul, JValue::Double(x), JValue::Double(y)) => Ok(JValue::Double(x * y)),
         (Binop::Div, JValue::Double(x), JValue::Double(y)) => Ok(JValue::Double(x / y)),
         (Binop::Rem, JValue::Double(x), JValue::Double(y)) => Ok(JValue::Double(x % y)),
-        _ => Err(vm.err_arithmetic("bad binop operands")),
+        _ => {
+            if log::log_enabled!(log::Level::Debug) {
+                log::debug!("DBG bad binop {op:?} {a:?} {b:?}");
+            }
+            Err(vm.err_arithmetic("bad binop operands"))
+        }
     }
 }

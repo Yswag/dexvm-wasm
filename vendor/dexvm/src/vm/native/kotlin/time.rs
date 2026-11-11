@@ -33,6 +33,12 @@ pub(super) fn kotlin_instant_to_epoch_millis(vm: &mut Vm, args: &[JValue]) -> R 
         _ => Err(npe(vm)),
     }
 }
+/// wasm: materializes `Instant.Companion`; 1.6-era extensions read it as a
+/// static field (`sget-object Instant;->Companion`) before calling parse().
+pub(crate) fn lazy_instant_companion(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlin/time/Instant$Companion;", Native::Opaque).unwrap_or(JValue::Null)
+}
+
 pub(super) fn kotlin_instant_now(vm: &mut Vm, _args: &[JValue]) -> R {
     let millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

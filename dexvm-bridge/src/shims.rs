@@ -39,9 +39,11 @@ fn stream_bytes(vm: &Vm, v: JValue) -> Result<Vec<u8>, NatErr> {
 fn jsoup_parse_stream(vm: &mut Vm, args: &[JValue]) -> Result<JValue, NatErr> {
     let bytes = stream_bytes(vm, args[0])?;
     let html = String::from_utf8_lossy(&bytes).into_owned();
-    // Extensions commonly pass a null baseUri/charset; treat those as "".
-    let base = if args.len() > 1 && vm.payload_of(args[1]).is_some() {
-        args[1]
+    // jsoup's signature is parse(InputStream, String charsetName, String baseUri).
+    // The base URI is the third argument — using the charset here left
+    // Document.location() empty, which some 1.6 sources build Referers from.
+    let base = if args.len() > 2 && vm.payload_of(args[2]).is_some() {
+        args[2]
     } else {
         vm.alloc_string("")
     };
@@ -108,6 +110,26 @@ fn unsupported(_vm: &mut Vm, _args: &[JValue]) -> Result<JValue, NatErr> {
     Ok(JValue::Null)
 }
 
+// --- java.time.format.DateTimeFormatter -------------------------------------
+// dexvm 0.2.0 only registers the two-arg `ofPattern(String, Locale)`.
+// 1.6-era sources (dm5, others) call the single-arg overload.
+
+fn dtf_of_pattern_one(vm: &mut Vm, args: &[JValue]) -> Result<JValue, NatErr> {
+    let pattern = vm.str_of_jvalue(args[0]).unwrap_or_default();
+    let cid = vm
+        .ensure_class_by_desc("Ljava/time/format/DateTimeFormatter;")
+        .map_err(NatErr::Fatal)?;
+    let inst = vm.arena.alloc(
+        cid,
+        Vec::new(),
+        Some(Native::DateFormatter {
+            pattern,
+            zone: String::new(),
+        }),
+    );
+    Ok(JValue::Obj(inst))
+}
+
 macro_rules! entry {
     ($c:expr, $n:expr, $s:expr, $i:expr, $f:expr $(,)?) => {
         NativeEntry {
@@ -121,6 +143,13 @@ macro_rules! entry {
 }
 
 pub const EXTRA_NATIVES: &[NativeEntry] = &[
+    entry!(
+        "Ljava/time/format/DateTimeFormatter;",
+        "ofPattern",
+        "(Ljava/lang/String;)Ljava/time/format/DateTimeFormatter;",
+        false,
+        dtf_of_pattern_one,
+    ),
     entry!(
         "Lorg/jsoup/Jsoup;",
         "parse",

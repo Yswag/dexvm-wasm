@@ -7,10 +7,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createDexvm } from '../dexvm-host.js';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const WASM = process.env.DEXVM_WASM || path.join(ROOT, 'dist', 'dexvm_bridge.wasm');
 const APK = process.argv[2];
 const WANT = process.argv[3] !== undefined ? Number(process.argv[3]) : null;
@@ -97,6 +98,8 @@ for (const [i, src] of sources.entries()) {
       if (pages.length) {
         const img = vm.call('imageUrl', { handle: opened.handle, sourceId: src.id, page: pages[0] });
         console.log(`  imageUrl: ${(img.imageUrl || '').slice(0, 80)}`);
+        const fetched = vm.call('fetchImage', { handle: opened.handle, sourceId: src.id, page: pages[0] });
+        console.log(`  image: ${fetched.bytes}B ${fetched.mime || '?'} ${(fetched.base64 || '').slice(0, 24)}`);
         done = true;
         break;
       }

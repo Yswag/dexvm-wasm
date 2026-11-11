@@ -49,13 +49,16 @@ thread_local! {
 /// the host import does a synchronous XHR under the hood.
 fn on_http(req: &HttpData) -> HttpResp {
     let mut req = req.clone();
-    if !req
+    let has_referer = req
         .headers
         .iter()
-        .any(|(k, _)| k.eq_ignore_ascii_case("referer"))
-    {
+        .any(|(k, v)| k.eq_ignore_ascii_case("referer") && !v.is_empty());
+    if !has_referer {
         let referer = DEFAULT_REFERER.with(|c| c.borrow().clone());
         if let Some(r) = referer {
+            // Some sources compute the Referer from a Page field that is empty
+            // in the headless flow; replace the empty header, don't append.
+            req.headers.retain(|(k, _)| !k.eq_ignore_ascii_case("referer"));
             req.headers.push(("Referer".to_string(), r));
         }
     }
@@ -337,6 +340,108 @@ fn resolve_image_url(k: &mut Keiyoushi, src: &Source, p: &PageRef) -> String {
     }
     p.image_url.clone()
 }
+
+/// Builds the request via the extension's own `getImageRequest(page)` and
+/// executes it through its client, so per-page headers (Referer, Accept, …)
+/// and image interceptors run exactly like in Mihon.
+fn image_response(
+    k: &mut Keiyoushi,
+    src: &Source,
+    p: &PageRef,
+    url: &str,
+) -> Result<JValue, JvmError> {
+    let pj = page_obj(k, p)?;
+    // 1.6 sources override `getImageRequest(Page)`; older ones override the
+    // legacy `imageRequest(Page)`. Try both and keep the request that actually
+    // carries headers (the one the extension customised).
+    let mut req = match k.ctx().invoke_on(
+        src.inst(),
+        "getImageRequest",
+        "(Leu/kanade/tachiyomi/source/model/Page;)Lokhttp3/Request;",
+        &[pj],
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            log::debug!("bridge: getImageRequest failed ({e}); falling back to a bare GET");
+            let cid = k.ctx().vm().ensure_class_by_desc("Lokhttp3/Request;")?;
+            let inst = k.ctx().vm().arena.alloc(
+                cid,
+                Vec::new(),
+                Some(Native::Request {
+                    url: url.to_string(),
+                    method: "GET".to_string(),
+                    headers: Vec::new(),
+                    body: None,
+                }),
+            );
+            JValue::Obj(inst)
+        }
+    };
+    if request_headers(k, req).map_or(true, |h| h.is_empty()) {
+        if let Ok(r2) = k.ctx().invoke_on(
+            src.inst(),
+            "imageRequest",
+            "(Leu/kanade/tachiyomi/source/model/Page;)Lokhttp3/Request;",
+            &[pj],
+        ) {
+            if request_headers(k, r2).is_some_and(|h| !h.is_empty()) {
+                req = r2;
+            }
+        }
+    }
+    if log::log_enabled!(log::Level::Debug) {
+        if let Some(Native::Request {
+            url: ru,
+            method: rm,
+            headers: rh,
+            ..
+        }) = k.ctx().vm().payload_of(req)
+        {
+            log::debug!("bridge: getImageRequest -> {rm} {ru} headers={rh:?}");
+        }
+    }
+    let client = k
+        .ctx()
+        .invoke_on(src.inst(), "getClient", "()Lokhttp3/OkHttpClient;", &[])
+        .map_err(|e| {
+            log::debug!("bridge: image getClient failed: {e}");
+            e
+        })?;
+    let call = k
+        .ctx()
+        .invoke_on(
+            client.as_obj(),
+            "newCall",
+            "(Lokhttp3/Request;)Lokhttp3/Call;",
+            &[req],
+        )
+        .map_err(|e| {
+            log::debug!("bridge: image newCall failed: {e}");
+            e
+        })?;
+    k.ctx()
+        .invoke_on(call.as_obj(), "execute", "()Lokhttp3/Response;", &[])
+        .map_err(|e| {
+            log::debug!("bridge: image execute failed: {e}");
+            e
+        })
+}
+
+fn request_headers(k: &mut Keiyoushi, req: JValue) -> Option<Vec<(String, String)>> {
+    match k.ctx().vm().payload_of(req) {
+        Some(Native::Request { headers, .. }) => Some(headers.clone()),
+        _ => None,
+    }
+}
+
+fn response_bytes(k: &mut Keiyoushi, resp: JValue) -> Option<Vec<u8>> {
+    match k.ctx().vm().payload_of(resp) {
+        Some(Native::Response { body: Some(b), .. }) => Some(b.clone()),
+        Some(Native::Response { body: None, .. }) => Some(Vec::new()),
+        _ => None,
+    }
+}
+
 
 fn preference_value(v: &Value) -> PreferenceValue {
     match v {
@@ -711,7 +816,9 @@ fn op_image_request(e: &mut Engine, req: &Value) -> R<Value> {
     // request as it leaves the interceptors and answers with an empty 200, so
     // decrypt/auth interceptors may throw here — the captured request is what
     // we are after.
-    let _ = e.k.image_data(&src, &url);
+    if image_response(&mut e.k, &src, &page, &url).is_err() {
+        let _ = e.k.image_data(&src, &url);
+    }
     let cap = CAPTURE.with(|c| c.borrow_mut().take());
     match cap {
         Some(c) if !c.url.is_empty() => Ok(json!({
@@ -740,18 +847,23 @@ fn op_fetch_image(e: &mut Engine, req: &Value) -> R<Value> {
     LAST_CONTENT_TYPE.with(|c| *c.borrow_mut() = None);
     DEFAULT_REFERER.with(|c| *c.borrow_mut() = base_url_of(&mut e.k, &src));
     take_http_error();
-    match e.k.image_data(&src, &url) {
-        Ok(bytes) => {
-            let mime = LAST_CONTENT_TYPE.with(|c| c.borrow_mut().take());
-            Ok(json!({
-                "url": url,
-                "bytes": bytes.len(),
-                "mime": mime,
-                "base64": base64::engine::general_purpose::STANDARD.encode(&bytes),
-            }))
-        }
-        Err(er) => Err(java_err(&mut e.k, er)),
-    }
+    let bytes = match image_response(&mut e.k, &src, &page, &url)
+        .ok()
+        .and_then(|resp| response_bytes(&mut e.k, resp))
+    {
+        Some(b) => b,
+        None => match e.k.image_data(&src, &url) {
+            Ok(b) => b,
+            Err(er) => return Err(java_err(&mut e.k, er)),
+        },
+    };
+    let mime = LAST_CONTENT_TYPE.with(|c| c.borrow_mut().take());
+    Ok(json!({
+        "url": url,
+        "bytes": bytes.len(),
+        "mime": mime,
+        "base64": base64::engine::general_purpose::STANDARD.encode(&bytes),
+    }))
 }
 
 fn op_preferences(e: &mut Engine, req: &Value) -> R<Value> {
