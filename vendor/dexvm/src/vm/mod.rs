@@ -1786,9 +1786,6 @@ impl Vm {
     }
 
     pub fn err_npe(&mut self) -> u32 {
-        if std::env::var("DEXVM_TRACE").is_ok() {
-            eprintln!("NPE@created");
-        }
         self.throwable_of("Ljava/lang/NullPointerException;", "")
     }
     pub fn err_npe_msg(&mut self, msg: impl Into<String>) -> u32 {

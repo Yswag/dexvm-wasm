@@ -1014,6 +1014,42 @@ pub(crate) fn dec_decode_bool_element(vm: &mut Vm, args: &[JValue]) -> R {
     }))
 }
 
+/// `CompositeDecoder.decodeFloatElement(descriptor, index)`.
+pub(crate) fn dec_decode_float_element(vm: &mut Vm, args: &[JValue]) -> R {
+    let v = member_primitive(vm, args).unwrap_or(JsonVal::Double(0.0));
+    Ok(JValue::Float(match v {
+        JsonVal::Int(i) => i as f32,
+        JsonVal::Double(d) => d as f32,
+        JsonVal::Bool(b) => {
+            if b {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        JsonVal::Str(s) => s.parse().unwrap_or(0.0),
+        _ => 0.0,
+    }))
+}
+
+/// `CompositeDecoder.decodeDoubleElement(descriptor, index)`.
+pub(crate) fn dec_decode_double_element(vm: &mut Vm, args: &[JValue]) -> R {
+    let v = member_primitive(vm, args).unwrap_or(JsonVal::Double(0.0));
+    Ok(JValue::Double(match v {
+        JsonVal::Int(i) => i as f64,
+        JsonVal::Double(d) => d,
+        JsonVal::Bool(b) => {
+            if b {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        JsonVal::Str(s) => s.parse().unwrap_or(0.0),
+        _ => 0.0,
+    }))
+}
+
 /// `CompositeDecoder.decodeCollectionSize(descriptor)`.
 pub(crate) fn dec_decode_collection_size(vm: &mut Vm, args: &[JValue]) -> R {
     let element = match payload(vm, args[0]) {
@@ -1278,6 +1314,16 @@ pub(crate) fn lazy_long_serializer(vm: &mut Vm) -> JValue {
         vm,
         "Lkotlinx/serialization/internal/LongSerializer;",
         PrimitiveSerializerKind::Long,
+    )
+}
+
+/// `BooleanSerializer`: the VM models booleans as 0/1 ints, so the Int
+/// conversion is the right one on both decode and encode paths.
+pub(crate) fn lazy_boolean_serializer(vm: &mut Vm) -> JValue {
+    lazy_primitive_serializer(
+        vm,
+        "Lkotlinx/serialization/internal/BooleanSerializer;",
+        PrimitiveSerializerKind::Int,
     )
 }
 
@@ -2679,6 +2725,20 @@ pub(crate) const SERIALIZATION_TABLE: &[NativeEntry] = &[
         "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)J",
         true,
         dec_decode_long_element
+    ),
+    ne!(
+        "Lkotlinx/serialization/json/internal/StreamingJsonDecoder;",
+        "decodeFloatElement",
+        "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)F",
+        true,
+        dec_decode_float_element
+    ),
+    ne!(
+        "Lkotlinx/serialization/json/internal/StreamingJsonDecoder;",
+        "decodeDoubleElement",
+        "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)D",
+        true,
+        dec_decode_double_element
     ),
     ne!(
         "Lkotlinx/serialization/json/internal/StreamingJsonDecoder;",

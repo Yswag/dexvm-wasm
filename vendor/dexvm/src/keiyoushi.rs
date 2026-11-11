@@ -717,7 +717,28 @@ impl Keiyoushi {
     fn read_chapter_list(&mut self, list: JValue) -> Result<Vec<Chapter>, JvmError> {
         let items = match self.ctx.vm().payload_of(list) {
             Some(Native::List(items)) => items,
-            _ => return Err(JvmError::Resolution("not a List".into())),
+            _ => {
+                if std::env::var("DEXVM_TRACE").is_ok() {
+                    let class = match list {
+                        JValue::Obj(o) => {
+                            let c = self.ctx.vm().arena.objects[o as usize].class;
+                            self.ctx.vm().class_desc_str(c).to_string()
+                        }
+                        _ => "-".to_string(),
+                    };
+                    eprintln!(
+                        "DEXVM_TRACE read_chapter_list: not a List (value={list:?}, class={class}, native={})",
+                        match self.ctx.vm().payload_of(list) {
+                            Some(Native::Json(_)) => "Json",
+                            Some(Native::Str(_)) => "Str",
+                            Some(Native::Opaque) => "Opaque",
+                            Some(_) => "other",
+                            None => "none",
+                        }
+                    );
+                }
+                return Err(JvmError::Resolution("not a List".into()));
+            }
         };
         let mut out = Vec::with_capacity(items.len());
         for c in items {
@@ -1072,6 +1093,53 @@ impl Keiyoushi {
                 cont,
             ],
         )
+    }
+
+    /// `getImageUrl(page)` — the lazy image-URL step. Sources that need to
+    /// fetch the reader page before they know the image URL override this as
+    /// a suspend function (Dragon Ball Multiverse) or a plain function
+    /// (older API); try both shapes.
+    pub fn try_get_image_url(&mut self, src: &Source, page: &PageRef) -> Option<String> {
+        let cid = self
+            .ctx
+            .vm()
+            .ensure_class_by_desc("Leu/kanade/tachiyomi/source/model/Page;")
+            .ok()?;
+        let obj = JValue::Obj(self.ctx.vm().arena.alloc(
+            cid,
+            Vec::new(),
+            Some(Native::SPPage {
+                index: page.index,
+                name: page.name.clone(),
+                url: page.url.clone(),
+                image_url: page.image_url.clone(),
+            }),
+        ));
+        let mut out = None;
+        if let Ok(cont) = self.suspend_cont() {
+            out = self
+                .ctx
+                .invoke_on(
+                    src.inst,
+                    "getImageUrl",
+                    "(Leu/kanade/tachiyomi/source/model/Page;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+                    &[obj, cont],
+                )
+                .ok();
+        }
+        if out.is_none() {
+            out = self
+                .ctx
+                .invoke_on(
+                    src.inst,
+                    "getImageUrl",
+                    "(Leu/kanade/tachiyomi/source/model/Page;)Ljava/lang/String;",
+                    &[obj],
+                )
+                .ok();
+        }
+        out.and_then(|v| self.ctx.vm().str_of_jvalue(v))
+            .filter(|s| !s.is_empty())
     }
 
     /// `getMangaUpdate(..., true, false)` read as a manga.

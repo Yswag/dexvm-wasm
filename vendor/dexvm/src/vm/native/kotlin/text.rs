@@ -266,6 +266,20 @@ fn stringskt_is_blank(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Int(i32::from(s.trim().is_empty())))
 }
 
+/// `StringsKt.toList(CharSequence)` — boxed Char elements.
+fn stringskt_charseq_to_list(vm: &mut Vm, args: &[JValue]) -> R {
+    let s = charseq_of(vm, args[0])?;
+    let mut items = Vec::with_capacity(s.chars().count());
+    for ch in s.chars() {
+        items.push(boxed(
+            vm,
+            "Ljava/lang/Character;",
+            Native::CharBox(ch as u16),
+        )?);
+    }
+    list_alloc(vm, items)
+}
+
 /// `StringsKt.toIntOrNull(String)` — boxed Integer or null.
 fn stringskt_to_int_or_null(vm: &mut Vm, args: &[JValue]) -> R {
     let s = charseq_of(vm, args[0])?;
@@ -1847,6 +1861,7 @@ pub(crate) const KOTLIN_TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/text/StringsKt;", "startsWith$default", "(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z", false, stringskt_starts_with_default),
     ne!("Lkotlin/text/StringsKt;", "isBlank", "(Ljava/lang/CharSequence;)Z", false, stringskt_is_blank),
     ne!("Lkotlin/text/StringsKt;", "toIntOrNull", "(Ljava/lang/String;)Ljava/lang/Integer;", false, stringskt_to_int_or_null),
+    ne!("Lkotlin/text/StringsKt;", "toList", "(Ljava/lang/CharSequence;)Ljava/util/List;", false, stringskt_charseq_to_list),
     ne!("Lkotlin/text/StringsKt;", "toFloatOrNull", "(Ljava/lang/String;)Ljava/lang/Float;", false, stringskt_to_float_or_null),
     ne!("Lkotlin/text/StringsKt;", "toIntOrNull", "(Ljava/lang/String;I)Ljava/lang/Integer;", false, stringskt_to_int_radix_or_null),
     ne!("Lkotlin/text/StringsKt;", "toLongOrNull", "(Ljava/lang/String;)Ljava/lang/Long;", false, stringskt_to_long_or_null),

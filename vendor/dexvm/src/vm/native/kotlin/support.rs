@@ -200,6 +200,12 @@ pub(crate) fn lazy_random_default(vm: &mut Vm) -> JValue {
     opaque_inst(vm, "Lkotlin/random/Random$Default;")
 }
 
+/// wasm: `kotlin.jvm.internal.StringCompanionObject.INSTANCE` (1.6 sources
+/// read it directly when comparing case-insensitively).
+pub(crate) fn lazy_string_companion_object(vm: &mut Vm) -> JValue {
+    opaque_inst(vm, "Lkotlin/jvm/internal/StringCompanionObject;")
+}
+
 pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/NoWhenBranchMatchedException;", "<init>", "()V", true, object_noop),
     ne!("Lkotlin/enums/EnumEntriesKt;", "enumEntries", "([Ljava/lang/Enum;)Lkotlin/enums/EnumEntries;", false, enum_entries),

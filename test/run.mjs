@@ -7,6 +7,7 @@
 //   node test/run.mjs fixtures       # every apk in fixtures/: open + sources
 //   node test/run.mjs live           # en.mangapill + all.comicfury full flow
 //   node test/run.mjs 1.6            # full flow for every ext-lib 1.6 fixture
+//   node test/run.mjs apks <dir>     # full flow for every *.apk in <dir>
 //   node test/run.mjs index          # 10 popular sources from keiyoushi index
 //   node test/run.mjs all            # everything, prints the result table
 import fs from 'node:fs';
@@ -81,11 +82,13 @@ let defaultUa = process.env.DEXVM_UA || MOBILE_UA;
 
 function syncHttp(reqJson) {
   const req = JSON.parse(reqJson);
+  if (process.env.DEXVM_HTTP_LOG) console.error(`http ${(req.method || 'GET').toUpperCase()} ${req.url}`);
   httpCount++;
   const id = `${process.pid}-${httpCount}`;
   const bodyFile = path.join(WORK, `body-${id}.bin`);
   const hdrFile = path.join(WORK, `hdr-${id}.txt`);
-  const args = ['-sS', '--max-time', '60', '-D', hdrFile, '-o', bodyFile, '-w', '%{http_code}'];
+  const args = ['-sS', '--max-time', '60', '-L', '--max-redirs', '5',
+    '-D', hdrFile, '-o', bodyFile, '-w', '%{http_code} %{url_effective}'];
   const method = (req.method || 'GET').toUpperCase();
   if (method !== 'GET') args.push('-X', method);
   const headers = [...(req.headers || [])];
@@ -101,13 +104,16 @@ function syncHttp(reqJson) {
   }
   args.push(req.url);
   let status = 0;
+  let finalUrl = req.url;
   try {
-    const out = execFileSync(CURL, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    status = parseInt(out.trim(), 10) || 0;
+    const out = execFileSync(CURL, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    const sp = out.indexOf(' ');
+    status = parseInt(sp > 0 ? out.slice(0, sp) : out, 10) || 0;
+    if (sp > 0) finalUrl = out.slice(sp + 1);
   } catch (e) {
     // curl exits non-zero on transport errors; -w is not set, so derive nothing
     const msg = (e.stderr || '').toString().trim().split('\n').pop() || String(e.message);
-    return JSON.stringify({ error: `curl: ${msg}` });
+    return JSON.stringify({ error: `curl: ${msg} (${req.url})` });
   }
   let hdrText = '';
   try {
@@ -135,7 +141,7 @@ function syncHttp(reqJson) {
     status,
     headers: finalHeaders,
     bodyBase64: body.toString('base64'),
-    finalUrl: req.url,
+    finalUrl,
   });
 }
 
@@ -183,7 +189,7 @@ function record(row) {
 
 function short(e) {
   const m = e && e.message ? e.message : String(e);
-  return m.replace(/\s+/g, ' ').slice(0, 260);
+  return m.replace(/\s+/g, ' ').slice(0, 700);
 }
 
 // Full source flow; `img` = also fetch the first page image.
@@ -194,18 +200,23 @@ async function runSource(vm, handle, source, { img = true } = {}) {
     const pop = vm.call('popular', { handle, sourceId: source.id, page: 1 });
     row.mangas = pop.mangas.length;
     if (!pop.mangas.length) throw new Error('popular returned 0 mangas');
-    // Some language sub-sources have no entries for the first popular manga;
-    // try up to three before declaring the source broken.
-    let manga = null, chapters = [], pages = [], details = null;
-    for (const candidate of pop.mangas.slice(0, 3)) {
-      details = vm.call('details', { handle, sourceId: source.id, manga: candidate });
-      const chs = vm.call('chapters', { handle, sourceId: source.id, manga: candidate });
-      if (!chs.length) continue;
-      const pgs = vm.call('pages', { handle, sourceId: source.id, chapter: chs[0] });
-      if (!pgs.length) continue;
-      manga = candidate; chapters = chs; pages = pgs; break;
+    // Some language sub-sources have no entries for the first popular manga
+    // (or the first entry is a dead link); try up to five before declaring
+    // the source broken.
+    let manga = null, chapters = [], pages = [], details = null, lastErr = null;
+    for (const candidate of pop.mangas.slice(0, 5)) {
+      try {
+        details = vm.call('details', { handle, sourceId: source.id, manga: candidate });
+        const chs = vm.call('chapters', { handle, sourceId: source.id, manga: candidate });
+        if (!chs.length) continue;
+        const pgs = vm.call('pages', { handle, sourceId: source.id, chapter: chs[0] });
+        if (!pgs.length) continue;
+        manga = candidate; chapters = chs; pages = pgs; break;
+      } catch (e) {
+        lastErr = e;
+      }
     }
-    if (!manga) throw new Error('no chapters/pages in the first 3 mangas');
+    if (!manga) throw lastErr || new Error('no chapters/pages in the first 5 mangas');
     row.title = manga.title;
     row.details = details.title;
     row.chapters = chapters.length;
@@ -302,12 +313,12 @@ async function modeLive() {
   }
 }
 
-async function modeFlows(apks, { img = true } = {}) {
+async function modeFlows(apks, { img = true, dir = FIXTURES, langs = null } = {}) {
   defaultUa = process.env.DEXVM_UA || DESKTOP_UA;
-  const vm = await newVm();
+  let vm = await newVm();
   const results = [];
   for (const apk of apks) {
-    const p = path.join(FIXTURES, apk);
+    const p = path.join(dir, apk);
     if (!fs.existsSync(p)) {
       record({ name: apk, error: 'fixture missing' });
       continue;
@@ -317,11 +328,25 @@ async function modeFlows(apks, { img = true } = {}) {
     try {
       const opened = await openApk(vm, p);
       const sources = vm.call('sources', { handle: opened.handle });
-      for (const s of sources) results.push(await runSource(vm, opened.handle, s, { img }));
-      vm.call('close', { handle: opened.handle });
+      const picked = langs ? sources.filter((s) => langs.includes(s.lang)) : sources;
+      let trapped = false;
+      for (const s of picked) {
+        const row = await runSource(vm, opened.handle, s, { img });
+        results.push(row);
+        if (row.error && row.error.includes('trapped')) {
+          trapped = true;
+          break;
+        }
+      }
+      if (trapped) {
+        vm = await newVm();
+      } else {
+        vm.call('close', { handle: opened.handle });
+      }
     } catch (e) {
       record({ name: apk, error: short(e) });
       results.push({ name: apk, error: short(e) });
+      if (String(e && e.message).includes('trapped')) vm = await newVm();
     }
     console.log(`   ${apk}: ${ms(t)}ms`);
   }
@@ -414,6 +439,13 @@ async function main() {
   if (mode === 'fixtures' || mode === 'all') summary.fixtures = await modeFixtures();
   if (mode === 'live' || mode === 'all') await modeLive();
   if (mode === '1.6' || mode === 'all') summary.flows16 = await modeFlows(APKS_16);
+  if (mode === 'apks') {
+    const dir = path.resolve(process.argv[3] || path.join(WORK, 'apks'));
+    const apks = fs.readdirSync(dir).filter((f) => f.endsWith('.apk')).sort();
+    const langs = process.env.DEXVM_ALL_LANGS ? null : ['zh'];
+    console.log(`scanning ${apks.length} APKs in ${dir} (langs: ${langs ? langs.join(',') : 'all'})\n`);
+    summary.apks = await modeFlows(apks, { dir, langs });
+  }
   if (mode === 'index' || mode === 'all') summary.index = await modeIndex();
   console.log(`\nhttp requests: ${httpCount}, bytes: ${(httpBytes / 1024 / 1024).toFixed(1)} MiB`);
   console.log(`total: ${(ms(started) / 1000).toFixed(1)}s`);

@@ -916,6 +916,10 @@ pub(crate) fn lazy_request_body_companion(vm: &mut Vm) -> JValue {
     opaque_inst(vm, "Lokhttp3/RequestBody$Companion;")
 }
 
+pub(crate) fn lazy_headers_companion(vm: &mut Vm) -> JValue {
+    opaque_inst(vm, "Lokhttp3/Headers$Companion;")
+}
+
 pub(crate) fn lazy_cache_control_force_network(vm: &mut Vm) -> JValue {
     alloc(
         vm,

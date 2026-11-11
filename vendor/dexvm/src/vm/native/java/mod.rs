@@ -26,6 +26,7 @@ pub(crate) use r#time::{
     lazy_iso_ordinal_date, lazy_iso_week_date, lazy_iso_zoned_date_time,
     lazy_rfc_1123_date_time,
 };
+pub(crate) use r#time::lazy_zone_offset_utc;
 pub(crate) use text::*;
 pub(crate) use util::*;
 

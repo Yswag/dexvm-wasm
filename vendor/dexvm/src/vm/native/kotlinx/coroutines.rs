@@ -147,14 +147,15 @@ pub(crate) fn coroutines_with_context(vm: &mut Vm, args: &[JValue]) -> R {
     )
 }
 pub(crate) fn coroutines_async_default(vm: &mut Vm, args: &[JValue]) -> R {
+    // Run the body eagerly; a failure must surface here (like `await` would
+    // rethrow), not turn into a null Deferred value.
     let value = inv_virt(
         vm,
         args[3],
         "invoke",
         "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
         &[args[0], JValue::Null],
-    )
-    .unwrap_or(JValue::Null);
+    )?;
     alloc(
         vm,
         "Lkotlinx/coroutines/Deferred;",

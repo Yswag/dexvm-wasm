@@ -352,6 +352,9 @@ fn resolve_image_url(k: &mut Keiyoushi, src: &Source, p: &PageRef) -> String {
             }
         }
     }
+    if let Some(s) = k.try_get_image_url(src, p) {
+        return s;
+    }
     p.image_url.clone()
 }
 

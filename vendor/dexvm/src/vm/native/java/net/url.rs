@@ -47,13 +47,26 @@ fn form_decode(value: &str) -> String {
 }
 
 pub(crate) fn url_encoder_encode(vm: &mut Vm, args: &[JValue]) -> R {
-    let value = jstr(vm, args[1])?;
+    // encode(String s, String charset): the charset is always UTF-8 here.
+    let value = jstr(vm, args[0])?;
+    let encoded = form_encode(&value);
+    Ok(new_str(vm, &encoded))
+}
+
+pub(crate) fn url_encoder_encode_default(vm: &mut Vm, args: &[JValue]) -> R {
+    let value = jstr(vm, args[0])?;
     let encoded = form_encode(&value);
     Ok(new_str(vm, &encoded))
 }
 
 pub(crate) fn url_decoder_decode(vm: &mut Vm, args: &[JValue]) -> R {
-    let value = jstr(vm, args[1])?;
+    let value = jstr(vm, args[0])?;
+    let decoded = form_decode(&value);
+    Ok(new_str(vm, &decoded))
+}
+
+pub(crate) fn url_decoder_decode_default(vm: &mut Vm, args: &[JValue]) -> R {
+    let value = jstr(vm, args[0])?;
     let decoded = form_decode(&value);
     Ok(new_str(vm, &decoded))
 }
@@ -106,11 +119,25 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         url_encoder_encode
     ),
     ne!(
+        "Ljava/net/URLEncoder;",
+        "encode",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+        false,
+        url_encoder_encode_default
+    ),
+    ne!(
         "Ljava/net/URLDecoder;",
         "decode",
         "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
         false,
         url_decoder_decode
+    ),
+    ne!(
+        "Ljava/net/URLDecoder;",
+        "decode",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+        false,
+        url_decoder_decode_default
     ),
     ne!(
         "Ljava/net/URL;",

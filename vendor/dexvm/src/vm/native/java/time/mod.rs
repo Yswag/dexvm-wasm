@@ -9,6 +9,7 @@ mod instant;
 mod local_date;
 mod local_date_time;
 mod zone_id;
+mod zone_offset;
 mod zoned_date_time;
 
 pub(crate) use chrono_unit::{
@@ -22,12 +23,14 @@ pub(crate) use date_time_formatter::{
     lazy_iso_local_time, lazy_iso_offset_date, lazy_iso_offset_date_time, lazy_iso_offset_time,
     lazy_iso_ordinal_date, lazy_iso_week_date, lazy_iso_zoned_date_time, lazy_rfc_1123_date_time,
 };
+pub(crate) use zone_offset::utc as lazy_zone_offset_utc;
 
 /// All java.time native tables, grouped for `register`.
 pub(crate) const TIME_TABLE: &[&[NativeEntry]] = &[
     date_time_formatter::TABLE,
     date_time_formatter_builder::TABLE,
     zone_id::TABLE,
+    zone_offset::TABLE,
     local_date::TABLE,
     local_date_time::TABLE,
     zoned_date_time::TABLE,

@@ -79,6 +79,48 @@ All vendor edits are marked `// wasm:`.
 * Cookie jar shared between `host.http` and `android.webkit.CookieManager`;
   the host can seed/read it through the `cookies` op (WebView challenge flow).
 
+### SAFE zh sweep (2026-11-12)
+
+`node test/run.mjs apks <dir>` over the 23 `CONTENT_WARNING_SAFE` zh
+extensions in the keiyoushi index (`zh` sources only). 8 pass end to end:
+
+| Source | Result |
+|---|---|
+| MangaToon (Limited) 1.6.2 | ✅ 18 / 276 / 1, image 70,349 B |
+| xkcd 1.6.2 | ✅ 1 / 676 / 2, image 47,080 B PNG |
+| ACGN 1.6.0 | ✅ 36 / 137 / 16, image 155,663 B |
+| 崩坏3 IP站 bh3 1.6.1 | ✅ 23 / 7 / 21, image 189,809 B |
+| Bika Manhua (unoriginal) 1.6.3 | ✅ 30 / 225 / 21, image 563,084 B |
+| 漫画1234 mh1234 1.6.6 | ✅ 21 / 554 / 11, image 104,424 B webp |
+| 漫画160 mh160 1.6.2 | ✅ 50 / 786 / 26, image 234,603 B |
+| 如漫 Rumanhua (unoriginal) 1.6.1 | ✅ 20 / 352 / 8, image 102,046 B webp |
+
+Failures, by cause:
+* Cloudflare/JS challenge (host-side WebView): baozimanhua, manhuawu,
+  dumanwu, rumanhua.
+* Dead or blocked hosts: guazimanhua (connect timeout), zazhimi (API body
+  empty), mangabz (popular 0), comicabc (popular 0).
+* Site markup changes: GoDa (detail links resolve to a broken host), manben /
+  Terra Historicus (detail NPE after a non-matching `selectFirst`),
+  zaimanhua (empty chapter list + canvas comment interceptor).
+* Needs Android graphics: Dragon Ball Multiverse (draws balloons onto images).
+
+VM/bridge fixes from this sweep:
+* `java.net.URLEncoder.encode` / `URLDecoder.decode` read the *charset*
+  argument instead of the string (every call returned `"UTF-8"`). This broke
+  every path-encoding helper.
+* `getImageUrl(page)` (suspend and plain shapes) is now consulted when the
+  page list carries no image URL.
+* Shims: `java.time.ZoneOffset.UTC`, `java.time.ZoneId`,
+  `StringCompanionObject.INSTANCE`, `okhttp3.Headers.Companion`,
+  `okhttp3.Response` implements `java.io.Closeable`,
+  `javax.net.ssl.HostnameVerifier`, `DateTimeFormatter.getZone`,
+  `BooleanSerializer.INSTANCE`, `decodeFloat/DoubleElement`,
+  `StringsKt.toList(CharSequence)`.
+* `async {}` no longer swallows the body's exception into a null Deferred.
+* The test harness follows redirects (OkHttp semantics) and resets the wasm
+  instance after a trap.
+
 ### Old 1.6 notes (2026-11-09, kept for history)
 
 Initial shims before the VM fixes: `Json.Default` singleton + inheritance,

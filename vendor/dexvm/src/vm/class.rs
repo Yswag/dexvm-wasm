@@ -644,7 +644,17 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         0
     ),
     #[cfg(feature = "okhttp")]
-    shim!("Lokhttp3/Headers;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        "Lokhttp3/Headers;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [sdef!(
+            "Companion",
+            "Lokhttp3/Headers$Companion;",
+            ShimValue::Lazy(native::lazy_headers_companion)
+        )]
+    ),
     #[cfg(feature = "okhttp")]
     shim!(
         "Lokhttp3/RequestBody;",
@@ -695,7 +705,12 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     #[cfg(feature = "okhttp")]
     shim!("Lokhttp3/Call;", Some("Ljava/lang/Object;"), &[], 0),
     #[cfg(feature = "okhttp")]
-    shim!("Lokhttp3/Response;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        "Lokhttp3/Response;",
+        Some("Ljava/lang/Object;"),
+        &["Ljava/io/Closeable;"],
+        0
+    ),
     #[cfg(feature = "okhttp")]
     shim!(
         "Lokhttp3/ResponseBody;",
@@ -2144,6 +2159,18 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     ),
     #[cfg(feature = "tachiyomi")]
     shim!(
+        "Lkotlinx/serialization/internal/BooleanSerializer;",
+        Some("Ljava/lang/Object;"),
+        &["Lkotlinx/serialization/KSerializer;"],
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Lkotlinx/serialization/internal/BooleanSerializer;",
+            ShimValue::Lazy(native::lazy_boolean_serializer)
+        )]
+    ),
+    #[cfg(feature = "tachiyomi")]
+    shim!(
         "Lcom/squareup/zstd/okio/OkioZstd;",
         Some("Ljava/lang/Object;"),
         &[],
@@ -2469,6 +2496,18 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         Some("Lkotlin/random/Random;"),
         &[],
         0
+    ),
+    #[cfg(feature = "kotlin")]
+    shim!(
+        "Lkotlin/jvm/internal/StringCompanionObject;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Lkotlin/jvm/internal/StringCompanionObject;",
+            ShimValue::Lazy(native::lazy_string_companion_object)
+        )]
     ),
     #[cfg(feature = "kotlin")]
     shim!(
@@ -3206,6 +3245,13 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     shim!("Lokhttp3/Dns;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
     #[cfg(feature = "okhttp")]
     shim!(
+        "Ljavax/net/ssl/HostnameVerifier;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    #[cfg(feature = "okhttp")]
+    shim!(
         "Lokhttp3/Headers$Companion;",
         Some("Ljava/lang/Object;"),
         &[],
@@ -3707,6 +3753,23 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         Some("Ljava/lang/Object;"),
         &[],
         0
+    ),
+    shim!(
+        "Ljava/time/ZoneId;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        ACC_PUBLIC
+    ),
+    shim!(
+        "Ljava/time/ZoneOffset;",
+        Some("Ljava/time/ZoneId;"),
+        &[],
+        ACC_PUBLIC,
+        [sdef!(
+            "UTC",
+            "Ljava/time/ZoneOffset;",
+            ShimValue::Lazy(native::lazy_zone_offset_utc)
+        )]
     ),
     shim!(
         "Ljava/time/LocalDateTime;",
