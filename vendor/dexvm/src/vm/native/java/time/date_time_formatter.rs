@@ -145,6 +145,11 @@ pub(crate) fn lazy_rfc_1123_date_time(vm: &mut Vm) -> JValue {
     dtf_pattern(vm, "EEE, dd MMM yyyy HH:mm:ss zzz")
 }
 
+/// `DateTimeFormatter.withZone(zone)` — chaining no-op; the pattern is kept.
+fn dtf_with_zone(_vm: &mut Vm, args: &[JValue]) -> R {
+    Ok(args[0])
+}
+
 /// `DateTimeFormatter.getZone()`. The fixed-offset model carries no real
 /// zone, so hand back a plain `ZoneId` tagged "Z".
 fn dtf_get_zone(vm: &mut Vm, _args: &[JValue]) -> R {
@@ -199,6 +204,13 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(Ljava/time/temporal/TemporalAccessor;)Ljava/lang/String;",
         true,
         dtf_format
+    ),
+    ne!(
+        "Ljava/time/format/DateTimeFormatter;",
+        "withZone",
+        "(Ljava/time/ZoneId;)Ljava/time/format/DateTimeFormatter;",
+        true,
+        dtf_with_zone
     ),
     ne!(
         "Ljava/time/format/DateTimeFormatter;",

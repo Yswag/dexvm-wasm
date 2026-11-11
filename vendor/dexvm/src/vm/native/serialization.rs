@@ -1898,6 +1898,17 @@ pub(crate) fn lazy_json_element_serializer(vm: &mut Vm) -> JValue {
     .unwrap_or(JValue::Null)
 }
 
+/// wasm: `JsonPrimitiveSerializer` behaves like the element serializer for
+/// the pass-through paths this VM supports.
+pub(crate) fn lazy_json_primitive_serializer(vm: &mut Vm) -> JValue {
+    alloc(
+        vm,
+        "Lkotlinx/serialization/json/JsonPrimitiveSerializer;",
+        Native::JsonElementSerializer,
+    )
+    .unwrap_or(JValue::Null)
+}
+
 /// wasm: `JsonElementSerializer` — pass the element through unchanged.
 fn json_element_serializer_deserialize(vm: &mut Vm, args: &[JValue]) -> R {
     match payload(vm, args[1]) {
@@ -2895,6 +2906,10 @@ pub(crate) const SERIALIZATION_TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/serialization/json/JsonElementSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, json_element_serializer_deserialize),
     ne!("Lkotlinx/serialization/json/JsonElementSerializer;", "serialize", "(Lkotlinx/serialization/encoding/Encoder;Lkotlinx/serialization/json/JsonElement;)V", true, json_element_serializer_serialize),
     ne!("Lkotlinx/serialization/json/JsonElementSerializer;", "serialize", "(Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V", true, json_element_serializer_serialize),
+    ne!("Lkotlinx/serialization/json/JsonPrimitiveSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Lkotlinx/serialization/json/JsonPrimitive;", true, json_element_serializer_deserialize),
+    ne!("Lkotlinx/serialization/json/JsonPrimitiveSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, json_element_serializer_deserialize),
+    ne!("Lkotlinx/serialization/json/JsonPrimitiveSerializer;", "serialize", "(Lkotlinx/serialization/encoding/Encoder;Lkotlinx/serialization/json/JsonPrimitive;)V", true, json_element_serializer_serialize),
+    ne!("Lkotlinx/serialization/json/JsonPrimitiveSerializer;", "serialize", "(Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V", true, json_element_serializer_serialize),
     ne!("Lkotlinx/serialization/internal/EnumSerializer;", "serialize", "(Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V", true, enum_serializer_serialize),
     ne!("Lkotlinx/serialization/internal/EnumSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, enum_serializer_deserialize),
     ne!("Lkotlinx/serialization/internal/EnumSerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, enum_serializer_descriptor),

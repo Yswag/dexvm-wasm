@@ -1379,6 +1379,23 @@ pub(super) fn arraydeque_is_empty(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Int(i32::from(items.is_empty())))
 }
 
+pub(super) fn arraydeque_size(vm: &mut Vm, args: &[JValue]) -> R {
+    let Some(Native::ArrayDeque(items)) = payload(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    Ok(JValue::Int(items.len() as i32))
+}
+
+pub(super) fn arraydeque_add_all(vm: &mut Vm, args: &[JValue]) -> R {
+    let extra = coll_elems(vm, args[1])?;
+    let Some(Native::ArrayDeque(items)) = payload_mut(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    let before = items.len();
+    items.extend(extra);
+    Ok(JValue::Int(i32::from(items.len() > before)))
+}
+
 pub(super) fn arraydeque_add_last(vm: &mut Vm, args: &[JValue]) -> R {
     let Some(Native::ArrayDeque(items)) = payload_mut(vm, args[0]) else {
         return Err(npe(vm));
@@ -1646,6 +1663,8 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/collections/ArrayDeque;", "firstOrNull", "()Ljava/lang/Object;", true, arraydeque_first_or_null),
     ne!("Lkotlin/collections/ArrayDeque;", "set", "(ILjava/lang/Object;)Ljava/lang/Object;", true, arraydeque_set),
     ne!("Lkotlin/collections/ArrayDeque;", "isEmpty", "()Z", true, arraydeque_is_empty),
+    ne!("Lkotlin/collections/ArrayDeque;", "size", "()I", true, arraydeque_size),
+    ne!("Lkotlin/collections/ArrayDeque;", "addAll", "(Ljava/util/Collection;)Z", true, arraydeque_add_all),
     ne!("Lkotlin/collections/ArrayDeque;", "addLast", "(Ljava/lang/Object;)V", true, arraydeque_add_last),
     ne!("Lkotlin/collections/ArrayDeque;", "add", "(Ljava/lang/Object;)Z", true, arraydeque_add),
     ne!("Lkotlin/collections/ArrayDeque;", "addFirst", "(Ljava/lang/Object;)V", true, arraydeque_add_first),

@@ -26,6 +26,21 @@ pub(crate) fn instant_of_epoch_milli(vm: &mut Vm, args: &[JValue]) -> R {
     )
 }
 
+pub(crate) fn instant_of_epoch_second(vm: &mut Vm, args: &[JValue]) -> R {
+    alloc(
+        vm,
+        "Ljava/time/Instant;",
+        Native::EpochMillis(long_of(vm, args[0]).saturating_mul(1000)),
+    )
+}
+
+pub(crate) fn instant_of_epoch_second_nano(vm: &mut Vm, args: &[JValue]) -> R {
+    let millis = long_of(vm, args[0])
+        .saturating_mul(1000)
+        .saturating_add(long_of(vm, args[1]) / 1_000_000);
+    alloc(vm, "Ljava/time/Instant;", Native::EpochMillis(millis))
+}
+
 pub(crate) fn instant_parse(vm: &mut Vm, args: &[JValue]) -> R {
     let text = charseq_of(vm, args[0])?;
     let millis = super::zoned_date_time::parse_pattern_millis(&text, "yyyy-MM-dd'T'HH:mm:ss")
@@ -55,6 +70,20 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(J)Ljava/time/Instant;",
         false,
         instant_of_epoch_milli
+    ),
+    ne!(
+        "Ljava/time/Instant;",
+        "ofEpochSecond",
+        "(J)Ljava/time/Instant;",
+        false,
+        instant_of_epoch_second
+    ),
+    ne!(
+        "Ljava/time/Instant;",
+        "ofEpochSecond",
+        "(JJ)Ljava/time/Instant;",
+        false,
+        instant_of_epoch_second_nano
     ),
     ne!(
         "Ljava/time/Instant;",

@@ -442,7 +442,7 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     #[cfg(feature = "jsoup")]
     shim!(
         "Lorg/jsoup/nodes/Element;",
-        Some("Ljava/lang/Object;"),
+        Some("Lorg/jsoup/nodes/Node;"),
         &[],
         0
     ),
@@ -731,6 +731,33 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         0
     ),
     // android framework shims
+    #[cfg(feature = "android")]
+    shim!(
+        "Landroid/os/Build;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    #[cfg(feature = "android")]
+    shim!(
+        "Landroid/os/Build$VERSION;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [
+            sdef!("SDK_INT", "I", ShimValue::Const(JValue::Int(34))),
+            sdef!(
+                "RELEASE",
+                "Ljava/lang/String;",
+                ShimValue::Lazy(native::android::lazy_build_release)
+            ),
+            sdef!(
+                "CODENAME",
+                "Ljava/lang/String;",
+                ShimValue::Lazy(native::android::lazy_build_codename)
+            ),
+        ]
+    ),
     #[cfg(feature = "android")]
     shim!(
         "Landroid/content/Context;",
@@ -1465,6 +1492,11 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
             ),
             sdef!(
                 "CHINA",
+                "Ljava/util/Locale;",
+                ShimValue::Lazy(native::lazy_locale_china)
+            ),
+            sdef!(
+                "CHINESE",
                 "Ljava/util/Locale;",
                 ShimValue::Lazy(native::lazy_locale_china)
             ),
@@ -2492,6 +2524,34 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     ),
     #[cfg(feature = "kotlin")]
     shim!(
+        "Lkotlin/reflect/KCallable;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    #[cfg(feature = "kotlin")]
+    shim!(
+        "Lkotlin/reflect/KFunction;",
+        None,
+        &["Lkotlin/reflect/KCallable;"],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    #[cfg(feature = "kotlin")]
+    shim!(
+        "Lkotlin/text/MatchGroup;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    #[cfg(feature = "kotlin")]
+    shim!(
+        "Lkotlin/text/MatchGroupCollection;",
+        Some("Ljava/lang/Object;"),
+        &["Ljava/util/List;"],
+        0
+    ),
+    #[cfg(feature = "kotlin")]
+    shim!(
         "Lkotlin/random/Random$Default;",
         Some("Lkotlin/random/Random;"),
         &[],
@@ -3222,7 +3282,39 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     #[cfg(feature = "okhttp")]
     shim!("Lokhttp3/Cache;", Some("Ljava/lang/Object;"), &[], 0),
     #[cfg(feature = "okhttp")]
-    shim!("Lokhttp3/Cookie;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        "Lokhttp3/Cookie;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [sdef!(
+            "Companion",
+            "Lokhttp3/Cookie$Companion;",
+            ShimValue::Lazy(native::lazy_cookie_companion)
+        )]
+    ),
+    #[cfg(feature = "okhttp")]
+    shim!(
+        "Lokhttp3/Protocol;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [
+            sdef!("HTTP_1_0", "Lokhttp3/Protocol;", ShimValue::Lazy(native::lazy_protocol)),
+            sdef!("HTTP_1_1", "Lokhttp3/Protocol;", ShimValue::Lazy(native::lazy_protocol)),
+            sdef!("HTTP_2", "Lokhttp3/Protocol;", ShimValue::Lazy(native::lazy_protocol)),
+            sdef!("SPDY_3", "Lokhttp3/Protocol;", ShimValue::Lazy(native::lazy_protocol)),
+            sdef!("QUIC", "Lokhttp3/Protocol;", ShimValue::Lazy(native::lazy_protocol)),
+            sdef!("H2_PRIOR_KNOWLEDGE", "Lokhttp3/Protocol;", ShimValue::Lazy(native::lazy_protocol)),
+        ]
+    ),
+    #[cfg(feature = "okhttp")]
+    shim!(
+        "Lokhttp3/Cookie$Companion;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
     #[cfg(feature = "okhttp")]
     shim!(
         "Lokhttp3/Cookie$Builder;",
@@ -3523,6 +3615,18 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     ),
     #[cfg(feature = "tachiyomi")]
     shim!(
+        "Lkotlinx/serialization/json/JsonPrimitiveSerializer;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Lkotlinx/serialization/json/JsonPrimitiveSerializer;",
+            ShimValue::Lazy(native::lazy_json_primitive_serializer)
+        )]
+    ),
+    #[cfg(feature = "tachiyomi")]
+    shim!(
         // wasm: 1.6-era code calls Json methods through `Json.Default`, so the
         // singleton must inherit from Json, not Object.
         "Lkotlinx/serialization/json/Json$Default;",
@@ -3753,6 +3857,24 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         Some("Ljava/lang/Object;"),
         &[],
         0
+    ),
+    shim!(
+        "Ljava/time/temporal/ChronoField;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [
+            sdef!("NANO_OF_SECOND", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_nano_of_second)),
+            sdef!("SECOND_OF_MINUTE", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_second_of_minute)),
+            sdef!("MINUTE_OF_HOUR", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_minute_of_hour)),
+            sdef!("HOUR_OF_DAY", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_hour_of_day)),
+            sdef!("DAY_OF_WEEK", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_day_of_week)),
+            sdef!("DAY_OF_MONTH", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_day_of_month)),
+            sdef!("DAY_OF_YEAR", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_day_of_year)),
+            sdef!("MONTH_OF_YEAR", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_month_of_year)),
+            sdef!("YEAR", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_year)),
+            sdef!("EPOCH_DAY", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_epoch_day)),
+        ]
     ),
     shim!(
         "Ljava/time/ZoneId;",

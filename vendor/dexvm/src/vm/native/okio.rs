@@ -351,6 +351,18 @@ pub(crate) fn okio_read_byte_array(vm: &mut Vm, args: &[JValue]) -> R {
     alloc_arr(vm, "B", len, move || ArrayData::Byte(data))
 }
 
+pub(crate) fn okio_read_byte_array_count(vm: &mut Vm, args: &[JValue]) -> R {
+    let n = long_of(vm, args[1]).max(0) as usize;
+    let Some(Native::OkioBuf { bytes, pos }) = payload_mut(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    let end = (*pos + n).min(bytes.len());
+    let data = bytes[*pos..end].iter().map(|&b| b as i8).collect::<Vec<_>>();
+    *pos = end;
+    let len = data.len();
+    alloc_arr(vm, "B", len, move || ArrayData::Byte(data))
+}
+
 pub(crate) fn okio_read_utf8(vm: &mut Vm, args: &[JValue]) -> R {
     let Some(Native::OkioBuf { bytes, pos }) = payload_mut(vm, args[0]) else {
         return Err(npe(vm));
@@ -756,6 +768,13 @@ pub(crate) const OKIO_TABLE: &[NativeEntry] = &[
     ),
     ne!(
         "Lokio/BufferedSource;",
+        "readByteArray",
+        "(J)[B",
+        true,
+        okio_read_byte_array_count
+    ),
+    ne!(
+        "Lokio/BufferedSource;",
         "readUtf8",
         "()Ljava/lang/String;",
         true,
@@ -769,6 +788,13 @@ pub(crate) const OKIO_TABLE: &[NativeEntry] = &[
         okio_exhausted
     ),
     ne!("Lokio/Buffer;", "get", "(J)B", true, okio_buffer_get),
+    ne!(
+        "Lokio/Buffer;",
+        "readByteArray",
+        "(J)[B",
+        true,
+        okio_read_byte_array_count
+    ),
     ne!("Lokio/Buffer;", "getByte", "(J)B", true, okio_buffer_get),
     ne!("Lokio/Buffer;", "size", "()J", true, okio_buffer_size),
     ne!(

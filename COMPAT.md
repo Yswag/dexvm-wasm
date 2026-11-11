@@ -121,6 +121,50 @@ VM/bridge fixes from this sweep:
 * The test harness follows redirects (OkHttp semantics) and resets the wasm
   instance after a trap.
 
+### MIXED/NSFW zh sweep (2026-11-12)
+
+Same harness over the 35 `CONTENT_WARNING_MIXED` + 39 `CONTENT_WARNING_NSFW`
+zh extensions: **31 of 74 pass** the full flow. Notable passes:
+
+| Source | Result |
+|---|---|
+| Akuma 1.6.11 | 60 / 1 / 86, 331 KB JPEG |
+| AsmHentai 1.6.15 | 20 / 1 / 198, 62 KB |
+| Cin.blue 1.6.1 | 25 / 1 / 79, 403 KB webp |
+| Comic Fury 1.6.1 (zh) | 20 / 68 / 1, 441 KB PNG |
+| HentaiFox 1.6.22 | 20 / 1 / 203, 163 KB |
+| NHentai.to 1.6.12 / NHentai.xxx 1.6.13 | 24–25 / 1 / 85–162, 238–283 KB |
+| 3Hentai 1.6.7 | 25 / 1 / 236, 347 KB |
+| 92漫画 1.6.1 | 36 / 96 / 49, 199 KB |
+| CManhua 1.6.1 | 12 / 48 / 1, 134 KB webp |
+| HANMAN18 / Manga Xiao Si | 20 / 326–336 / 156, 61–62 KB |
+| dm5, Komiic, manhuagui, kaobeimanhua, 极速漫画, 比卡漫画 … | unchanged |
+
+Failure buckets:
+* Cloudflare/anti-bot: MyReadingManga, MyComic, 18漫画, 90漫画, 优酷漫画,
+  绅士会所 (451), 禁漫天堂.
+* Dead/blocked hosts: HentaiHand, nHentai.com, Luscious, 漫蛙 (connect fail).
+* Site markup/API changes: Ahri Gallery, Manga Ball, Swarm, 米卡漫画,
+  Hanime1 (0 mangas), BaKa/巴卡.
+* VM gaps still open: `X509EncodedKeySpec`/RSA (漫画人), Kotlin reflection
+  (`KFunction`, `MatchGroup` cast), continuation casts (`Pixiv`, 嬉皮漫畫),
+  `okio`/`Class.getClassifier`, `SupportLibReflectionUtil`, and three sources
+  that trap the wasm instance (Kagane, 漫?漫画, zero…) — needs a panic message
+  from the host before they can be diagnosed.
+* `NHentai.website` and one more reach the reader but fail
+  `pageListParse` (`NumberFormatException: ""`).
+
+Shims added for this sweep: `Cookie.Companion`, `okhttp3.Protocol`,
+`java.time.temporal.ChronoField` constants, `Locale.CHINESE`,
+`Build.VERSION.SDK_INT/RELEASE/CODENAME`, `JsonPrimitiveSerializer.INSTANCE`,
+`Instant.ofEpochSecond` (+nanos), `kotlin.time.Instant.Companion.DISTANT_PAST`,
+`Instant.epochSeconds`, `ArrayDeque.size/addAll`, `ListIterator.hasPrevious/
+previous`, `DateTimeFormatter.withZone`, `DateTimeFormatterBuilder.
+parseCaseInsensitive`, `okio.BufferedSource/Buffer.readByteArray(J)`,
+jsoup `Element : Node`, `CompletableDeferred(value)`,
+`MatchGroupCollection`/`MatchGroup`, `SharedPreferences.getAll` and
+`WebView.getWebViewClassLoader`.
+
 ### Old 1.6 notes (2026-11-09, kept for history)
 
 Initial shims before the VM fixes: `Json.Default` singleton + inheritance,

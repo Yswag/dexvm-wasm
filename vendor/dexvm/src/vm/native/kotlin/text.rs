@@ -796,6 +796,55 @@ fn match_group_get_value(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(new_str(vm, &value))
 }
 
+/// `MatchResult.getGroups()` — a `MatchGroupCollection` whose entries are
+/// `MatchGroup` objects carrying the captured text.
+fn match_result_get_groups(vm: &mut Vm, args: &[JValue]) -> R {
+    let text_values = match payload(vm, args[0]) {
+        Some(Native::Matcher(ms)) => {
+            if !ms.groups.is_empty() {
+                ms.groups
+                    .iter()
+                    .map(|group| match group {
+                        Some((start, end)) => ms.text.get(*start..*end).unwrap_or("").to_string(),
+                        None => String::new(),
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                let whole = match ms.last {
+                    Some((start, end)) => ms.text.get(start..end).unwrap_or("").to_string(),
+                    None => String::new(),
+                };
+                vec![whole]
+            }
+        }
+        _ => Vec::new(),
+    };
+    let mut items = Vec::with_capacity(text_values.len());
+    for value in text_values {
+        items.push(alloc(
+            vm,
+            "Lkotlin/text/MatchGroup;",
+            Native::Str(value),
+        )?);
+    }
+    list_alloc(vm, items)
+}
+
+fn match_groups_size(vm: &mut Vm, args: &[JValue]) -> R {
+    let Some(Native::List(items)) = payload(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    Ok(JValue::Int(items.len() as i32))
+}
+
+fn match_groups_get(vm: &mut Vm, args: &[JValue]) -> R {
+    let i = int_of(vm, args[1]);
+    let Some(Native::List(items)) = payload(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    items.get(i.max(0) as usize).copied().ok_or_else(|| ioobe(vm, i))
+}
+
 /// Kotlin's ISO-8601 parser used by extension date filters.  This accepts the
 /// common UTC form (`YYYY-MM-DDTHH:MM:SS[.fraction]Z`) and returns null for
 /// malformed/unsupported values, matching `parseOrNull`.
@@ -1895,6 +1944,12 @@ pub(crate) const KOTLIN_TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/text/MatchResult$Destructured;", "toList", "()Ljava/util/List;", true, match_result_destructured_to_list),
     ne!("Lkotlin/text/MatchGroup;", "getValue", "()Ljava/lang/String;", true, match_group_get_value),
     ne!("Lkotlin/text/MatcherMatchResult;", "getValue", "()Ljava/lang/String;", true, match_result_get_value),
+    ne!("Lkotlin/text/MatchResult;", "getGroups", "()Lkotlin/text/MatchGroupCollection;", true, match_result_get_groups),
+    ne!("Lkotlin/text/MatcherMatchResult;", "getGroups", "()Lkotlin/text/MatchGroupCollection;", true, match_result_get_groups),
+    ne!("Lkotlin/text/MatchGroupCollection;", "size", "()I", true, match_groups_size),
+    ne!("Lkotlin/text/MatchGroupCollection;", "get", "(I)Lkotlin/text/MatchGroup;", true, match_groups_get),
+    ne!("Lkotlin/text/MatchGroupCollection;", "get", "(I)Ljava/lang/Object;", true, match_groups_get),
+    ne!("Lkotlin/text/MatchGroup;", "getValue", "()Ljava/lang/String;", true, match_group_get_value),
     ne!("Lkotlin/text/StringsKt;", "contains$default", "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;ZILjava/lang/Object;)Z", false, stringskt_contains_default),
     ne!("Lkotlin/text/StringsKt;", "contains$default", "(Ljava/lang/CharSequence;CZILjava/lang/Object;)Z", false, stringskt_contains_char_default),
     ne!("Lkotlin/text/StringsKt;", "substringAfter", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;", false, stringskt_substring_after),

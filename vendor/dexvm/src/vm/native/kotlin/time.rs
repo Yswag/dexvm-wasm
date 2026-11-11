@@ -39,6 +39,23 @@ pub(crate) fn lazy_instant_companion(vm: &mut Vm) -> JValue {
     alloc(vm, "Lkotlin/time/Instant$Companion;", Native::Opaque).unwrap_or(JValue::Null)
 }
 
+/// wasm: `Instant.Companion.DISTANT_PAST` (year 1, same value as kotlin.time).
+pub(super) fn kotlin_instant_distant_past(vm: &mut Vm, _args: &[JValue]) -> R {
+    alloc(
+        vm,
+        "Lkotlin/time/Instant;",
+        Native::EpochMillis(-62_135_596_800_000),
+    )
+}
+
+/// wasm: `Instant.epochSeconds` (experimental in kotlin.time) as seconds.
+pub(super) fn kotlin_instant_epoch_seconds(vm: &mut Vm, args: &[JValue]) -> R {
+    match payload(vm, args[0]) {
+        Some(Native::EpochMillis(m)) => Ok(JValue::Long(m.div_euclid(1000))),
+        _ => Err(npe(vm)),
+    }
+}
+
 pub(super) fn kotlin_instant_now(vm: &mut Vm, _args: &[JValue]) -> R {
     let millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -259,6 +276,20 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(Ljava/lang/CharSequence;)Lkotlin/time/Instant;",
         true,
         kotlin_instant_parse_or_null
+    ),
+    ne!(
+        "Lkotlin/time/Instant$Companion;",
+        "getDISTANT_PAST",
+        "()Lkotlin/time/Instant;",
+        true,
+        kotlin_instant_distant_past
+    ),
+    ne!(
+        "Lkotlin/time/Instant;",
+        "getEpochSeconds",
+        "()J",
+        true,
+        kotlin_instant_epoch_seconds
     ),
     ne!(
         "Lkotlin/time/Duration;",

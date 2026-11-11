@@ -50,6 +50,12 @@ fn builder_to_formatter(vm: &mut Vm, args: &[JValue]) -> R {
     )
 }
 
+/// `parseCaseInsensitive()` — case-insensitive parsing is always on for the
+/// text formatters in this shim, so just return the builder for chaining.
+fn builder_parse_case_insensitive(_vm: &mut Vm, args: &[JValue]) -> R {
+    Ok(args[0])
+}
+
 pub(crate) const TABLE: &[NativeEntry] = &[
     ne!(
         "Ljava/time/format/DateTimeFormatterBuilder;",
@@ -71,6 +77,13 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(Ljava/time/temporal/TemporalField;J)Ljava/time/format/DateTimeFormatterBuilder;",
         true,
         builder_parse_defaulting
+    ),
+    ne!(
+        "Ljava/time/format/DateTimeFormatterBuilder;",
+        "parseCaseInsensitive",
+        "()Ljava/time/format/DateTimeFormatterBuilder;",
+        true,
+        builder_parse_case_insensitive
     ),
     ne!(
         "Ljava/time/format/DateTimeFormatterBuilder;",

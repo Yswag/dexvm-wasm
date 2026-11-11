@@ -920,6 +920,16 @@ pub(crate) fn lazy_headers_companion(vm: &mut Vm) -> JValue {
     opaque_inst(vm, "Lokhttp3/Headers$Companion;")
 }
 
+/// wasm: `Lokhttp3/Cookie$Companion` singleton.
+pub(crate) fn lazy_cookie_companion(vm: &mut Vm) -> JValue {
+    opaque_inst(vm, "Lokhttp3/Cookie$Companion;")
+}
+
+/// wasm: `okhttp3.Protocol` constants.
+pub(crate) fn lazy_protocol(vm: &mut Vm) -> JValue {
+    opaque_inst(vm, "Lokhttp3/Protocol;")
+}
+
 pub(crate) fn lazy_cache_control_force_network(vm: &mut Vm) -> JValue {
     alloc(
         vm,

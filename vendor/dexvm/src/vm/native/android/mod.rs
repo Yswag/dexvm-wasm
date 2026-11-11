@@ -8,6 +8,15 @@ use crate::permission::{FilesystemPermission, Permission};
 
 pub(crate) mod graphics;
 
+/// wasm: `android.os.Build.VERSION.RELEASE` / `CODENAME`.
+pub(crate) fn lazy_build_release(vm: &mut Vm) -> JValue {
+    vm.alloc_string("14")
+}
+
+pub(crate) fn lazy_build_codename(vm: &mut Vm) -> JValue {
+    vm.alloc_string("REL")
+}
+
 // ---------------------------------------------------------------------------
 // android framework
 // ---------------------------------------------------------------------------
@@ -291,6 +300,29 @@ pub(crate) fn shared_prefs_get_float(vm: &mut Vm, args: &[JValue]) -> R {
             _ => args[2],
         },
     )
+}
+
+/// `SharedPreferences.getAll()` — snapshot of every stored value.
+pub(crate) fn shared_prefs_get_all(vm: &mut Vm, args: &[JValue]) -> R {
+    let name = shared_prefs_name(vm, args[0])?;
+    let snapshot: Vec<(String, PreferenceValue)> = vm
+        .shared_preferences
+        .get(&name)
+        .map(|p| p.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+        .unwrap_or_default();
+    let mut entries = Vec::with_capacity(snapshot.len());
+    for (key, value) in snapshot {
+        let key = new_str(vm, &key);
+        let value = match value {
+            PreferenceValue::Bool(b) => JValue::Int(i32::from(b)),
+            PreferenceValue::Int(i) => JValue::Int(i),
+            PreferenceValue::Long(l) => JValue::Long(l),
+            PreferenceValue::Float(f) => JValue::Float(f),
+            PreferenceValue::String(s) => new_str(vm, &s),
+        };
+        entries.push((key, value));
+    }
+    alloc(vm, "Ljava/util/HashMap;", Native::Map(entries))
 }
 
 pub(crate) fn shared_prefs_contains(vm: &mut Vm, args: &[JValue]) -> R {
@@ -1304,6 +1336,11 @@ fn webview_init(_vm: &mut Vm, _args: &[JValue]) -> R {
     Ok(JValue::Null)
 }
 
+/// `WebView.getWebViewClassLoader()` — a headless placeholder loader.
+fn webview_class_loader(vm: &mut Vm, _args: &[JValue]) -> R {
+    alloc(vm, "Ljava/lang/ClassLoader;", Native::Opaque)
+}
+
 fn webview_load_url(vm: &mut Vm, args: &[JValue]) -> R {
     let url = jstr(vm, args[1]).unwrap_or_default();
     log::warn!("WebView.loadUrl is a no-op on the headless host (url={url})");
@@ -1961,6 +1998,13 @@ pub(crate) const ANDROID_TABLE: &[NativeEntry] = &[
     ),
     ne!(
         "Landroid/content/SharedPreferences;",
+        "getAll",
+        "()Ljava/util/Map;",
+        true,
+        shared_prefs_get_all
+    ),
+    ne!(
+        "Landroid/content/SharedPreferences;",
         "getInt",
         "(Ljava/lang/String;I)I",
         true,
@@ -2267,6 +2311,13 @@ pub(crate) const ANDROID_TABLE: &[NativeEntry] = &[
         web_settings_instance
     ),
     ne!("Landroid/webkit/WebView;", "destroy", "()V", true, ui_noop),
+    ne!(
+        "Landroid/webkit/WebView;",
+        "getWebViewClassLoader",
+        "()Ljava/lang/ClassLoader;",
+        false,
+        webview_class_loader
+    ),
     ne!(
         "Landroid/webkit/WebView;",
         "stopLoading",

@@ -27,6 +27,12 @@ pub(crate) use r#time::{
     lazy_rfc_1123_date_time,
 };
 pub(crate) use r#time::lazy_zone_offset_utc;
+pub(crate) use r#time::{
+    lazy_chrono_field_day_of_month, lazy_chrono_field_day_of_week, lazy_chrono_field_day_of_year,
+    lazy_chrono_field_epoch_day, lazy_chrono_field_hour_of_day,
+    lazy_chrono_field_minute_of_hour, lazy_chrono_field_month_of_year,
+    lazy_chrono_field_nano_of_second, lazy_chrono_field_second_of_minute, lazy_chrono_field_year,
+};
 pub(crate) use text::*;
 pub(crate) use util::*;
 

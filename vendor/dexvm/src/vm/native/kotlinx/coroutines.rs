@@ -50,6 +50,18 @@ pub(crate) fn completable_deferred_default(vm: &mut Vm, _args: &[JValue]) -> R {
         },
     )
 }
+
+/// wasm: `CompletableDeferred(value)` overload (completed immediately).
+pub(crate) fn completable_deferred_value(vm: &mut Vm, args: &[JValue]) -> R {
+    alloc(
+        vm,
+        "Lkotlinx/coroutines/CompletableDeferred;",
+        Native::Deferred {
+            value: args[0],
+            error: JValue::Null,
+        },
+    )
+}
 pub(crate) fn mutex_default(vm: &mut Vm, _args: &[JValue]) -> R {
     alloc(
         vm,
@@ -188,6 +200,7 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/coroutines/BuildersKt;", "runBlockingK$default", "(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;", false, coroutines_run_blocking),
     ne!("Lkotlinx/coroutines/TimeoutKt;", "withTimeout-KLykuaI", "(JLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", false, coroutines_with_timeout),
     ne!("Lkotlinx/coroutines/CompletableDeferredKt;", "CompletableDeferred$default", "(Lkotlinx/coroutines/Job;ILjava/lang/Object;)Lkotlinx/coroutines/CompletableDeferred;", false, completable_deferred_default),
+    ne!("Lkotlinx/coroutines/CompletableDeferredKt;", "CompletableDeferred", "(Ljava/lang/Object;)Lkotlinx/coroutines/CompletableDeferred;", false, completable_deferred_value),
     ne!("Lkotlinx/coroutines/BuildersKt;", "launch$default", "(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/Job;", false, coroutines_launch_default),
     ne!("Lkotlinx/coroutines/BuildersKt;", "async$default", "(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/Deferred;", false, coroutines_async_default),
     ne!("Lkotlinx/coroutines/CoroutineScopeKt;", "coroutineScope", "(Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", false, coroutines_scope),
