@@ -245,6 +245,7 @@ const FIXTURE_APKS = [
   'tachiyomi-zh.dm5-v1.6.4.apk',
   'tachiyomi-zh.komiic-v1.6.11.apk',
   'tachiyomi-zh.manhuagui-v1.6.1.apk',
+  'tachiyomi-zh.kaobeimanhua-v1.6.1.apk',
   'tachiyomi-zh.baozimanhua-v1.6.33.apk',
   // ext-lib 1.6: these are the versions the keiyoushi repo currently publishes.
   'tachiyomi-vi.cuutruyenmoe-v1.6.3.apk',
@@ -381,6 +382,7 @@ const WANTED = [
   'tachiyomi-zh.manhuagui',
   'tachiyomi-zh.dm5',
   'tachiyomi-zh.komiic',
+  'tachiyomi-zh.kaobeimanhua',
   'tachiyomi-en.mangapill',
   'tachiyomi-en.comickfan',
   'tachiyomi-en.asurascans',

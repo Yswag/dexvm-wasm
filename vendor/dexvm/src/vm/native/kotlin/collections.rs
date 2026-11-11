@@ -272,10 +272,14 @@ fn join_to_string_with_items(vm: &mut Vm, items: &[JValue], args: &[JValue]) -> 
         }
         let s = if transform.is_null_ref() {
             match v {
+                // Kotlin renders null elements as "null" (appendElement).
+                JValue::Null => "null".to_string(),
                 JValue::Int(i) => i.to_string(),
                 JValue::Long(l) => l.to_string(),
                 JValue::Float(f) => f.to_string(),
-                _ => charseq_of(vm, *v)?,
+                // Boxed Char (from `List<Char>`) is not a CharSequence; fall
+                // back to `toString()` so `joinToString("")` builds text.
+                _ => charseq_of(vm, *v).or_else(|_| to_string_of(vm, *v))?,
             }
         } else {
             let r = inv_virt(
@@ -285,7 +289,11 @@ fn join_to_string_with_items(vm: &mut Vm, items: &[JValue], args: &[JValue]) -> 
                 "(Ljava/lang/Object;)Ljava/lang/Object;",
                 &[*v],
             )?;
-            charseq_of(vm, r)?
+            if r.is_null_ref() {
+                "null".to_string()
+            } else {
+                charseq_of(vm, r).or_else(|_| to_string_of(vm, r))?
+            }
         };
         out.push_str(&s);
     }

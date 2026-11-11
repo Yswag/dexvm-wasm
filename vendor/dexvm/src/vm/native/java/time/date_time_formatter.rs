@@ -94,6 +94,57 @@ pub(crate) fn dtf_format(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(new_str(vm, &out))
 }
 
+/// wasm: materializer for the JDK's predefined formatter constants; 1.6
+/// sources read `DateTimeFormatter.ISO_LOCAL_DATE` & co. as static fields.
+fn dtf_pattern(vm: &mut Vm, pattern: &str) -> JValue {
+    alloc(
+        vm,
+        "Ljava/time/format/DateTimeFormatter;",
+        Native::DateFormatter {
+            pattern: pattern.to_string(),
+            zone: String::new(),
+        },
+    )
+    .unwrap_or(JValue::Null)
+}
+
+pub(crate) fn lazy_iso_local_date(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "yyyy-MM-dd")
+}
+pub(crate) fn lazy_iso_local_time(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "HH:mm:ss")
+}
+pub(crate) fn lazy_iso_local_date_time(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "yyyy-MM-dd'T'HH:mm:ss")
+}
+pub(crate) fn lazy_iso_offset_date(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "yyyy-MM-ddXXX")
+}
+pub(crate) fn lazy_iso_offset_time(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "HH:mm:ssXXX")
+}
+pub(crate) fn lazy_iso_offset_date_time(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "yyyy-MM-dd'T'HH:mm:ssXXX")
+}
+pub(crate) fn lazy_iso_zoned_date_time(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "yyyy-MM-dd'T'HH:mm:ssXXX'['VV']'")
+}
+pub(crate) fn lazy_iso_instant(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "yyyy-MM-dd'T'HH:mm:ssX")
+}
+pub(crate) fn lazy_basic_iso_date(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "yyyyMMdd")
+}
+pub(crate) fn lazy_iso_ordinal_date(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "yyyy-DDD")
+}
+pub(crate) fn lazy_iso_week_date(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "YYYY-'W'ww-e")
+}
+pub(crate) fn lazy_rfc_1123_date_time(vm: &mut Vm) -> JValue {
+    dtf_pattern(vm, "EEE, dd MMM yyyy HH:mm:ss zzz")
+}
+
 /// Native methods for Ljava/time/format/DateTimeFormatter;
 pub(crate) const TABLE: &[NativeEntry] = &[
     ne!(

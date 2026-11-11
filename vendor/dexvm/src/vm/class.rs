@@ -2451,7 +2451,18 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     #[cfg(feature = "kotlin")]
     shim!("Lkotlin/math/MathKt;", Some("Ljava/lang/Object;"), &[], 0),
     #[cfg(feature = "kotlin")]
-    shim!("Lkotlin/random/Random;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        // wasm: 1.6-era code reads `Random.Default` as a static field.
+        "Lkotlin/random/Random;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [sdef!(
+            "Default",
+            "Lkotlin/random/Random$Default;",
+            ShimValue::Lazy(native::lazy_random_default)
+        )]
+    ),
     #[cfg(feature = "kotlin")]
     shim!(
         "Lkotlin/random/Random$Default;",
@@ -2643,6 +2654,77 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
             "Lkotlin/time/Clock$System;",
             ShimValue::Lazy(native::lazy_clock_system_instance)
         ),]
+    ),
+    #[cfg(feature = "kotlin")]
+    shim!(
+        // wasm: predefined formatter constants (1.6 sources read ISO_LOCAL_DATE
+        // & co. as static fields instead of calling ofPattern).
+        "Ljava/time/format/DateTimeFormatter;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [
+            sdef!(
+                "ISO_LOCAL_DATE",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_iso_local_date)
+            ),
+            sdef!(
+                "ISO_LOCAL_TIME",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_iso_local_time)
+            ),
+            sdef!(
+                "ISO_LOCAL_DATE_TIME",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_iso_local_date_time)
+            ),
+            sdef!(
+                "ISO_OFFSET_DATE",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_iso_offset_date)
+            ),
+            sdef!(
+                "ISO_OFFSET_TIME",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_iso_offset_time)
+            ),
+            sdef!(
+                "ISO_OFFSET_DATE_TIME",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_iso_offset_date_time)
+            ),
+            sdef!(
+                "ISO_ZONED_DATE_TIME",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_iso_zoned_date_time)
+            ),
+            sdef!(
+                "ISO_INSTANT",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_iso_instant)
+            ),
+            sdef!(
+                "BASIC_ISO_DATE",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_basic_iso_date)
+            ),
+            sdef!(
+                "ISO_ORDINAL_DATE",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_iso_ordinal_date)
+            ),
+            sdef!(
+                "ISO_WEEK_DATE",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_iso_week_date)
+            ),
+            sdef!(
+                "RFC_1123_DATE_TIME",
+                "Ljava/time/format/DateTimeFormatter;",
+                ShimValue::Lazy(native::lazy_rfc_1123_date_time)
+            ),
+        ]
     ),
     #[cfg(feature = "kotlin")]
     shim!(

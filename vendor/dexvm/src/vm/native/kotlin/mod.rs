@@ -39,6 +39,7 @@ pub(crate) use statics::{
     result_companion as lazy_result_companion, unit_instance as lazy_unit_instance,
 };
 pub(crate) use support::opaque_inst;
+pub(crate) use support::lazy_random_default;
 pub(crate) use support::TABLE as SUPPORT_TABLE;
 pub(crate) use text::*;
 pub(crate) use time::lazy_instant_companion;

@@ -8,6 +8,7 @@
 //! The network is never touched here: every OkHttp request that reaches the
 //! host layer is forwarded to the imported `host.http` function.
 
+mod cookies;
 mod engine;
 mod host;
 mod shims;

@@ -134,6 +134,7 @@ Other `fd_*` return `EBADF`; `path_*` return `ENOSYS`.
 | `preferences` | `sourceId` | `SettingsNode[]` |
 | `setPreference` | `sourceId`, `key`, `value` | `{ file, key }` |
 | `exportPrefs` | — | `{ "<prefs file>": { key: value } }` |
+| `cookies` | `set?`, `import?`, `get?`, `clear?` | `{ cookies }` or `{ cookie }` |
 | `close` | — | `null` |
 
 ```ts
@@ -152,6 +153,7 @@ type SettingsNode = { key: string|null; title: string|null; summary: string|null
                       entryValues: string[]; defaultText: string|null;
                       defaultValues: string[]; children: SettingsNode[] };
 type Manifest = { packageId: string; appName: string; versionName: string|null;
+                  extensionLib: string|null; supported: boolean;
                   minSdk: number|null; targetSdk: number|null;
                   iconResourceId: number|null; nsfw: null };
 ```
@@ -165,6 +167,11 @@ untouched and the last response's `content-type`.
 
 `open`'s `prefs` uses the same shape as `exportPrefs` and is seeded before the
 extension reads it: `{ "source_3973269831131863421": { "website_password": "…" } }`.
+
+`cookies` is the jar shared by `host.http` and `android.webkit.CookieManager`.
+`set` takes `[[host, name, value], …]`, `import` takes an `exportPrefs`-shaped
+object, `get` returns `{ cookie: "a=b; c=d" }` (or `null`), and `clear` empties
+it. This is how a host-side WebView challenge can hand cookies back to the VM.
 
 ## Upstream changes
 
@@ -184,14 +191,24 @@ return `null`.
 
 The fork also carries small shim additions needed by ext-lib 1.6 sources —
 kotlinx.serialization singletons (`Json.Default`, `JsonElementSerializer`,
-`EnumSerializer.serialize`), `IntRange.iterator`, `DateTimeFormatter.parseCaseInsensitive`,
-jsoup relative/`:contains` selectors, and non-panicking value access in
+`EnumSerializer.serialize`), `IntRange.iterator`, `DateTimeFormatter.parseCaseInsensitive`
+and the predefined `ISO_*` formatters, `Random.Default` + its `next*` family,
+`RoundingMode`, `Instant.Companion`, jsoup relative/`:contains` selectors,
+`Headers$Builder.get`, and non-panicking value access in
 `payload_of`/`str_of_jvalue`. Every edit site is marked `// wasm:`.
+
+The bridge also fills host gaps that the crate implements behind C features:
+QuickJS (`evaluate` returns real Java arrays/HashMap, `compile`/`execute`
+round-trip source), the shared cookie jar, `DateTimeFormatter.ofPattern(String)`,
+the jsoup `InputStream` base-URI overload, and image requests routed through
+the extension's own `getImageRequest`/`imageRequest`.
 
 ## Verification
 
-Corpus: 5 APKs from the upstream crate. All open and list sources; ids, langs
-and base URLs match the upstream expectations.
+Corpus: `test/fixtures/` — 14 APKs pinned in `run.mjs` (3 ext-lib 1.4, 11
+ext-lib 1.6); `multidex.apk` is a parser fixture. All 14 open and list sources;
+ids, langs and base URLs match upstream expectations. The table below is the
+2026-11-08 v0.1.0 snapshot.
 
 | source | mangas | chapters | pages | image |
 |---|---|---|---|---|
@@ -202,18 +219,19 @@ Cold start (`open` + first `sources`): 77 ms and 140 ms. 14 of 15 language
 sub-sources of Comic Fury complete the full flow; one has no chapters in its
 first three mangas (site data).
 
-The 10 popular sources currently published by the keiyoushi repo (4 Chinese,
-2 image-descrambling) fail at `popular` — see `COMPAT.md`. They are ext-lib 1.6
-builds; dexvm 0.2.0 implements the 1.5 generation of the API.
+The ext-lib 1.6 builds currently published by the keiyoushi repo are
+gated by `node test/run.mjs 1.6`; see `COMPAT.md` for the per-source
+matrix (dm5, Komiic, manhuagui and kaobeimanhua currently pass end to end).
 
 ## Limitations
 
 * **Panics trap.** `wasm32-wasip1` has no unwinding, so `catch_unwind` is inert.
   The loader converts a trap into `DexvmError { kind: 'trap' }` and marks the
   instance unusable; recovery requires a fresh instance.
-* **ext-lib 1.6.x is not supported.** Missing shims: `Json.Default`,
-  `DateTimeFormatter.parseCaseInsensitive()`, some `Collection.iterator()`
-  paths; several sources also NPE during parsing.
+* **ext-lib 1.6.x is partially supported.** dm5, Komiic, manhuagui and
+  kaobeimanhua pass the full flow; see [`COMPAT.md`](COMPAT.md) for the current
+  matrix. Remaining blockers are source/site-specific (RSA crypto for
+  manhuaren, gatekeeper challenges for baozimanhua).
 * **`nsfw` is always `null`.** NSFW flags live in the extension index, not the APK.
 * **Image `Referer`.** Some CDNs reject requests without one, so `fetchImage`
   and `imageRequest` fall back to the source's `baseUrl` when the extension sets

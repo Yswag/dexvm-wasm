@@ -69,6 +69,60 @@ pub(super) fn kotlin_random_next_double(_vm: &mut Vm, _args: &[JValue]) -> R {
         .map_or(0, |d| d.subsec_nanos());
     Ok(JValue::Double(f64::from(seed % 1_000_000) / 1_000_000.0))
 }
+
+fn random_u64() -> u64 {
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0x9E37_79B9_7F4A_7C15, |d| d.as_nanos() as u64);
+    // xorshift64*: enough for chapter ids, nonces and shuffles.
+    let mut x = seed | 1;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+}
+
+fn random_byte_arg(args: &[JValue]) -> i32 {
+    args.iter()
+        .skip(1)
+        .find_map(|v| match v {
+            JValue::Int(i) => Some(*i),
+            _ => None,
+        })
+        .unwrap_or(0)
+}
+
+/// wasm: `Random.nextBytes(Int)` — fills a fresh `[B`.
+pub(super) fn kotlin_random_next_bytes(vm: &mut Vm, args: &[JValue]) -> R {
+    let n = random_byte_arg(args).max(0) as usize;
+    let mut x = random_u64();
+    let mut bytes = Vec::with_capacity(n);
+    for _ in 0..n {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        bytes.push(x as u8 as i8);
+    }
+    alloc(vm, "[B", Native::Array(ArrayData::Byte(bytes)))
+}
+
+pub(super) fn kotlin_random_next_long(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Long(random_u64() as i64))
+}
+
+pub(super) fn kotlin_random_next_float(_vm: &mut Vm, _args: &[JValue]) -> R {
+    let bits = (random_u64() >> 40) as u32;
+    Ok(JValue::Float((bits as f32) / (1u32 << 24) as f32))
+}
+
+pub(super) fn kotlin_random_next_boolean(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Int(i32::from(random_u64() & 1 == 1)))
+}
+
+/// `Random.nextInt()` with no bounds.
+pub(super) fn kotlin_random_next_int(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Int(random_u64() as i32))
+}
 pub(super) fn kotlin_random_kt_random(vm: &mut Vm, _args: &[JValue]) -> R {
     Ok(opaque_inst(vm, "Lkotlin/random/Random;"))
 }
@@ -140,6 +194,12 @@ pub(crate) fn opaque_inst(vm: &mut Vm, desc: &str) -> JValue {
     JValue::Obj(vm.arena.alloc(class, Vec::new(), Some(Native::Opaque)))
 }
 
+/// wasm: `kotlin.random.Random.Default` static field (1.6 sources read it
+/// directly instead of calling `RandomKt.Random`).
+pub(crate) fn lazy_random_default(vm: &mut Vm) -> JValue {
+    opaque_inst(vm, "Lkotlin/random/Random$Default;")
+}
+
 pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/NoWhenBranchMatchedException;", "<init>", "()V", true, object_noop),
     ne!("Lkotlin/enums/EnumEntriesKt;", "enumEntries", "([Ljava/lang/Enum;)Lkotlin/enums/EnumEntries;", false, enum_entries),
@@ -150,6 +210,17 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/coroutines/jvm/internal/Boxing;", "boxChar", "(C)Ljava/lang/Character;", false, boxing_identity),
     ne!("Lkotlin/coroutines/jvm/internal/Boxing;", "boxDouble", "(D)Ljava/lang/Double;", false, boxing_box_double),
     ne!("Lkotlin/random/Random$Default;", "nextDouble", "()D", true, kotlin_random_next_double),
+    // wasm: rest of the Random surface used by 1.6 sources (nonces/ids).
+    ne!("Lkotlin/random/Random$Default;", "nextBytes", "(I)[B", true, kotlin_random_next_bytes),
+    ne!("Lkotlin/random/Random$Default;", "nextLong", "()J", true, kotlin_random_next_long),
+    ne!("Lkotlin/random/Random$Default;", "nextFloat", "()F", true, kotlin_random_next_float),
+    ne!("Lkotlin/random/Random$Default;", "nextBoolean", "()Z", true, kotlin_random_next_boolean),
+    ne!("Lkotlin/random/Random$Default;", "nextInt", "()I", true, kotlin_random_next_int),
+    ne!("Lkotlin/random/Random;", "nextBytes", "(I)[B", true, kotlin_random_next_bytes),
+    ne!("Lkotlin/random/Random;", "nextLong", "()J", true, kotlin_random_next_long),
+    ne!("Lkotlin/random/Random;", "nextFloat", "()F", true, kotlin_random_next_float),
+    ne!("Lkotlin/random/Random;", "nextBoolean", "()Z", true, kotlin_random_next_boolean),
+    ne!("Lkotlin/random/Random;", "nextInt", "()I", true, kotlin_random_next_int),
     ne!("Lkotlin/random/RandomKt;", "Random", "(J)Lkotlin/random/Random;", false, kotlin_random_kt_random),
     ne!("Lkotlin/jvm/internal/Reflection;", "getOrCreateKotlinClass", "(Ljava/lang/Class;)Lkotlin/reflect/KClass;", false, kotlin_reflection_class),
     ne!("Lkotlin/jvm/internal/Reflection;", "typeOf", "(Ljava/lang/Class;)Lkotlin/reflect/KType;", false, kotlin_reflection_class),

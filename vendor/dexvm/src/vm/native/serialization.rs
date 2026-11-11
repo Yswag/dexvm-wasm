@@ -2830,7 +2830,11 @@ pub(crate) const SERIALIZATION_TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/serialization/internal/ObjectSerializer;", "<init>", "(Ljava/lang/String;Ljava/lang/Object;[Ljava/lang/annotation/Annotation;)V", true, serializer_opaque_init),
     ne!("Lkotlinx/serialization/internal/EnumsKt;", "createSimpleEnumSerializer", "(Ljava/lang/String;[Ljava/lang/Enum;)Lkotlinx/serialization/KSerializer;", false, enum_serializer_create),
     ne!("Lkotlinx/serialization/json/JsonElementSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Lkotlinx/serialization/json/JsonElement;", true, json_element_serializer_deserialize),
+    // wasm: the compiler-generated bridge method used by 1.6 sources has an
+    // Object return type; without it the INSTANCE serializer looks unsupported.
+    ne!("Lkotlinx/serialization/json/JsonElementSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, json_element_serializer_deserialize),
     ne!("Lkotlinx/serialization/json/JsonElementSerializer;", "serialize", "(Lkotlinx/serialization/encoding/Encoder;Lkotlinx/serialization/json/JsonElement;)V", true, json_element_serializer_serialize),
+    ne!("Lkotlinx/serialization/json/JsonElementSerializer;", "serialize", "(Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V", true, json_element_serializer_serialize),
     ne!("Lkotlinx/serialization/internal/EnumSerializer;", "serialize", "(Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V", true, enum_serializer_serialize),
     ne!("Lkotlinx/serialization/internal/EnumSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, enum_serializer_deserialize),
     ne!("Lkotlinx/serialization/internal/EnumSerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, enum_serializer_descriptor),

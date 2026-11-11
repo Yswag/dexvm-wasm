@@ -1700,6 +1700,19 @@ fn hex_format_bytes(bytes: &[u8], state: &HexFormatState) -> String {
     out
 }
 
+fn hex_state_or_default(vm: &mut Vm, value: JValue) -> HexFormatState {
+    match payload(vm, value) {
+        Some(Native::HexFormat(s)) => s.clone(),
+        // `toHexString$default` passes null when the mask requests the default
+        // HexFormat; treat null/missing as `HexFormat.Default`.
+        _ => HexFormatState {
+            uppercase: false,
+            byte_prefix: String::new(),
+            byte_separator: String::new(),
+        },
+    }
+}
+
 /// `HexExtensionsKt.toHexString$default(ByteArray, HexFormat, int, Object)`.
 fn hex_extensions_to_hex_string_default(vm: &mut Vm, args: &[JValue]) -> R {
     let bytes = match payload(vm, args[0]) {
@@ -1708,7 +1721,7 @@ fn hex_extensions_to_hex_string_default(vm: &mut Vm, args: &[JValue]) -> R {
         }
         _ => return Err(npe(vm)),
     };
-    let state = hex_state_of(vm, args[1])?;
+    let state = hex_state_or_default(vm, args[1]);
     Ok(new_str(vm, &hex_format_bytes(&bytes, &state)))
 }
 
@@ -1718,7 +1731,7 @@ fn hex_extensions_to_hex_string(vm: &mut Vm, args: &[JValue]) -> R {
 
 fn hex_extensions_to_hex_string_byte(vm: &mut Vm, args: &[JValue]) -> R {
     let byte = int_of(vm, args[0]) as u8;
-    let state = hex_state_of(vm, args[1])?;
+    let state = hex_state_or_default(vm, args[1]);
     Ok(new_str(vm, &hex_format_bytes(&[byte], &state)))
 }
 

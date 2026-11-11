@@ -273,22 +273,13 @@ impl Keiyoushi {
     pub fn sources(&mut self) -> Result<Vec<Source>, JvmError> {
         let factory = self.vm().find_factory_class("createSources");
         if let Ok(desc) = factory {
-            self.ctx.call(&desc, "<init>", &[])?;
-            let list = self.ctx.invoke("createSources", &[])?;
-            let items = match list {
-                JValue::Obj(id) => match &self.vm().arena.objects[id as usize].native {
-                    Some(Native::List(items)) => items.clone(),
-                    _ => return Err(JvmError::Resolution("createSources: bad result".into())),
-                },
-                _ => return Err(JvmError::Resolution("createSources: bad result".into())),
-            };
-            let mut out = Vec::new();
-            for item in items {
-                if let JValue::Obj(o) = item {
-                    out.push(Source { inst: o });
-                }
+            match self.sources_from_factory(&desc) {
+                Ok(out) if !out.is_empty() => return Ok(out),
+                Ok(_) => {}
+                Err(e) => log::warn!(
+                    "wasm: createSources failed ({e}); falling back to single-source discovery"
+                ),
             }
-            return Ok(out);
         }
         let desc = self.vm().find_http_source_subclass()?;
         self.ctx.call(&desc, "<init>", &[])?;
@@ -297,6 +288,27 @@ impl Keiyoushi {
             .last_instance()
             .ok_or_else(|| JvmError::Resolution(format!("{desc}: no instance after <init>")))?;
         Ok(vec![Source { inst }])
+    }
+
+    /// One factory failure must not hide sources that still work: the caller
+    /// falls back to the legacy single-source path when this errors.
+    fn sources_from_factory(&mut self, desc: &str) -> Result<Vec<Source>, JvmError> {
+        self.ctx.call(desc, "<init>", &[])?;
+        let list = self.ctx.invoke("createSources", &[])?;
+        let items = match list {
+            JValue::Obj(id) => match &self.vm().arena.objects[id as usize].native {
+                Some(Native::List(items)) => items.clone(),
+                _ => return Err(JvmError::Resolution("createSources: bad result".into())),
+            },
+            _ => return Err(JvmError::Resolution("createSources: bad result".into())),
+        };
+        let mut out = Vec::new();
+        for item in items {
+            if let JValue::Obj(o) = item {
+                out.push(Source { inst: o });
+            }
+        }
+        Ok(out)
     }
 
     pub fn source_name(&mut self, src: &Source) -> Result<String, JvmError> {

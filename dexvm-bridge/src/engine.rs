@@ -62,6 +62,15 @@ fn on_http(req: &HttpData) -> HttpResp {
             req.headers.push(("Referer".to_string(), r));
         }
     }
+    if !req
+        .headers
+        .iter()
+        .any(|(k, v)| k.eq_ignore_ascii_case("cookie") && !v.is_empty())
+    {
+        if let Some(cookie) = crate::cookies::cookie_header(&req.url) {
+            req.headers.push(("Cookie".to_string(), cookie));
+        }
+    }
     let req = &req;
     if CAPTURE.with(|c| c.borrow().is_some()) {
         CAPTURE.with(|c| {
@@ -83,6 +92,11 @@ fn on_http(req: &HttpData) -> HttpResp {
     }
     match crate::host::http_call(req) {
         Ok(r) => {
+            for (k, v) in &r.headers {
+                if k.eq_ignore_ascii_case("set-cookie") {
+                    crate::cookies::store_set_cookie(&req.url, v);
+                }
+            }
             LAST_CONTENT_TYPE.with(|c| {
                 *c.borrow_mut() = r
                     .header("content-type")
@@ -597,6 +611,7 @@ fn fail(e: &mut Engine, kind: &str, msg: String) -> Value {
 pub fn dispatch(op: &str, req: &Value) -> R<Value> {
     match op {
         "open" => op_open(req),
+        "cookies" => op_cookies(req),
         _ => {
             let h = handle_of(req)?;
             match op {
@@ -638,8 +653,39 @@ pub fn dispatch(op: &str, req: &Value) -> R<Value> {
     }
 }
 
-fn op_open(req: &Value) -> R<Value> {
-    use base64::Engine as _;
+/// Cookie-jar access for the host (and for Vesper's WebView challenge flow).
+///
+/// `{op:"cookies"}` returns the whole jar; `get` returns one host's header;
+/// `set` takes `[[host, name, value], ...]` (or an `import` object shaped like
+/// the export); `clear` empties it.
+fn op_cookies(req: &Value) -> R<Value> {
+    if let Some(set) = req.get("set").and_then(|v| v.as_array()) {
+        for item in set {
+            let Some(arr) = item.as_array() else { continue };
+            if arr.len() < 3 {
+                continue;
+            }
+            let host = arr[0].as_str().unwrap_or_default();
+            let name = arr[1].as_str().unwrap_or_default();
+            let value = arr[2].as_str().unwrap_or_default();
+            if !host.is_empty() && !name.is_empty() {
+                crate::cookies::set_cookie_pair(host, name, value);
+            }
+        }
+    }
+    if let Some(import) = req.get("import") {
+        crate::cookies::import(import);
+    }
+    if req.get("clear").and_then(|v| v.as_bool()).unwrap_or(false) {
+        crate::cookies::clear();
+    }
+    if let Some(url) = req.get("get").and_then(|v| v.as_str()) {
+        return Ok(json!({ "cookie": crate::cookies::cookie_header(url) }));
+    }
+    Ok(json!({ "cookies": crate::cookies::export() }))
+}
+
+fn op_open(req: &Value) -> R<Value> {    use base64::Engine as _;
     let b64 = req
         .get("apkBase64")
         .and_then(|v| v.as_str())
