@@ -183,6 +183,30 @@ pub(crate) fn deferred_await(vm: &mut Vm, args: &[JValue]) -> R {
         _ => Err(npe(vm)),
     }
 }
+
+/// wasm: `CompletableDeferred.complete(value)` / `completeExceptionally` —
+/// the VM has no scheduler, so completion is just the stored value.
+pub(crate) fn deferred_complete(vm: &mut Vm, args: &[JValue]) -> R {
+    let value = args[1];
+    let Some(Native::Deferred { value: slot, .. }) = payload_mut(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    *slot = value;
+    Ok(JValue::Int(1))
+}
+
+pub(crate) fn deferred_complete_exceptionally(vm: &mut Vm, args: &[JValue]) -> R {
+    let error = args[1];
+    let Some(Native::Deferred { error: slot, .. }) = payload_mut(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    *slot = error;
+    Ok(JValue::Int(1))
+}
+
+pub(crate) fn deferred_is_completed(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Int(1))
+}
 pub(crate) fn deferred_await_all(vm: &mut Vm, args: &[JValue]) -> R {
     let values = coll_elems(vm, args[0])?
         .into_iter()
@@ -206,6 +230,10 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/coroutines/CoroutineScopeKt;", "coroutineScope", "(Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", false, coroutines_scope),
     ne!("Lkotlinx/coroutines/BuildersKt;", "withContext", "(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", false, coroutines_with_context),
     ne!("Lkotlinx/coroutines/Deferred;", "await", "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", true, deferred_await),
+    ne!("Lkotlinx/coroutines/CompletableDeferred;", "await", "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", true, deferred_await),
+    ne!("Lkotlinx/coroutines/CompletableDeferred;", "complete", "(Ljava/lang/Object;)Z", true, deferred_complete),
+    ne!("Lkotlinx/coroutines/CompletableDeferred;", "completeExceptionally", "(Ljava/lang/Throwable;)Z", true, deferred_complete_exceptionally),
+    ne!("Lkotlinx/coroutines/CompletableDeferred;", "isCompleted", "()Z", true, deferred_is_completed),
     ne!("Lkotlinx/coroutines/AwaitKt;", "awaitAll", "(Ljava/util/Collection;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", false, deferred_await_all),
     ne!("Lkotlinx/coroutines/sync/MutexKt;", "Mutex$default", "(ZILjava/lang/Object;)Lkotlinx/coroutines/sync/Mutex;", false, mutex_default),
     ne!("Lkotlinx/coroutines/sync/Mutex;", "lock", "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", true, mutex_lock),

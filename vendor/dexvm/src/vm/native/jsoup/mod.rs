@@ -594,6 +594,52 @@ pub(crate) fn element_tag_name(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(vm.alloc_string(&tag))
 }
 
+/// wasm: `Element.isBlock()` — block-level tag check used by some parsers.
+pub(crate) fn element_is_block(vm: &mut Vm, args: &[JValue]) -> R {
+    let doc = doc_of(vm, args[0])?;
+    let payload0 = payload(vm, args[0]);
+    let id = payload0.and_then(element_id_of).ok_or_else(|| npe(vm))?;
+    let d = &*doc.doc;
+    let node = node_ref_of(d, id);
+    let tag = node.node_name().unwrap_or_default().to_lowercase();
+    let block = matches!(
+        tag.as_str(),
+        "address"
+            | "article"
+            | "aside"
+            | "blockquote"
+            | "body"
+            | "dd"
+            | "div"
+            | "dl"
+            | "dt"
+            | "fieldset"
+            | "figcaption"
+            | "figure"
+            | "footer"
+            | "form"
+            | "h1"
+            | "h2"
+            | "h3"
+            | "h4"
+            | "h5"
+            | "h6"
+            | "header"
+            | "hr"
+            | "html"
+            | "li"
+            | "main"
+            | "nav"
+            | "ol"
+            | "p"
+            | "pre"
+            | "section"
+            | "table"
+            | "ul"
+    );
+    Ok(JValue::Int(i32::from(block)))
+}
+
 pub(crate) fn element_own_text(vm: &mut Vm, args: &[JValue]) -> R {
     let doc = doc_of(vm, args[0])?;
     let payload0 = payload(vm, args[0]);
@@ -2077,6 +2123,13 @@ pub(crate) const JSOUP_TABLE: &[NativeEntry] = &[
         "()Ljava/lang/String;",
         true,
         element_tag_name
+    ),
+    ne!(
+        "Lorg/jsoup/nodes/Element;",
+        "isBlock",
+        "()Z",
+        true,
+        element_is_block
     ),
     ne!(
         "Lorg/jsoup/nodes/Element;",

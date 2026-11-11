@@ -827,7 +827,11 @@ fn match_result_get_groups(vm: &mut Vm, args: &[JValue]) -> R {
             Native::Str(value),
         )?);
     }
-    list_alloc(vm, items)
+    alloc(
+        vm,
+        "Lkotlin/text/MatchGroupCollection;",
+        Native::List(items),
+    )
 }
 
 fn match_groups_size(vm: &mut Vm, args: &[JValue]) -> R {

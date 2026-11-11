@@ -56,6 +56,40 @@ pub(super) fn kotlin_instant_epoch_seconds(vm: &mut Vm, args: &[JValue]) -> R {
     }
 }
 
+fn instant_millis(vm: &Vm, value: JValue) -> Option<i64> {
+    match payload(vm, value) {
+        Some(Native::EpochMillis(m)) => Some(*m),
+        _ => None,
+    }
+}
+
+/// wasm: `Instant.compareTo(other)`.
+pub(super) fn kotlin_instant_compare(vm: &mut Vm, args: &[JValue]) -> R {
+    let a = instant_millis(vm, args[0]).ok_or_else(|| npe(vm))?;
+    let b = instant_millis(vm, args[1]).ok_or_else(|| npe(vm))?;
+    Ok(JValue::Int((a - b).signum() as i32))
+}
+
+/// wasm: `Instant.minus-UwyO8pc(other)` — the difference as a raw
+/// `kotlin.time.Duration` (milliseconds).
+pub(super) fn kotlin_instant_minus_instant(vm: &mut Vm, args: &[JValue]) -> R {
+    let a = instant_millis(vm, args[0]).ok_or_else(|| npe(vm))?;
+    let b = instant_millis(vm, args[1]).ok_or_else(|| npe(vm))?;
+    Ok(JValue::Long(a - b))
+}
+
+/// wasm: `Instant.toString()` in ISO-8601 UTC.
+pub(super) fn kotlin_instant_to_string(vm: &mut Vm, args: &[JValue]) -> R {
+    let m = instant_millis(vm, args[0]).ok_or_else(|| npe(vm))?;
+    let (y, mo, d, h, mi, s, ms) = crate::vm::native::civil_components(m);
+    let mut out = format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}");
+    if ms != 0 {
+        out.push_str(&format!(".{ms:03}"));
+    }
+    out.push('Z');
+    Ok(new_str(vm, &out))
+}
+
 pub(super) fn kotlin_instant_now(vm: &mut Vm, _args: &[JValue]) -> R {
     let millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -290,6 +324,27 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "()J",
         true,
         kotlin_instant_epoch_seconds
+    ),
+    ne!(
+        "Lkotlin/time/Instant;",
+        "compareTo",
+        "(Lkotlin/time/Instant;)I",
+        true,
+        kotlin_instant_compare
+    ),
+    ne!(
+        "Lkotlin/time/Instant;",
+        "minus-UwyO8pc",
+        "(Lkotlin/time/Instant;)J",
+        true,
+        kotlin_instant_minus_instant
+    ),
+    ne!(
+        "Lkotlin/time/Instant;",
+        "toString",
+        "()Ljava/lang/String;",
+        true,
+        kotlin_instant_to_string
     ),
     ne!(
         "Lkotlin/time/Duration;",

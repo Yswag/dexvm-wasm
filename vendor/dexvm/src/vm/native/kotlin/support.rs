@@ -233,6 +233,7 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/jvm/internal/Reflection;", "typeOf", "(Ljava/lang/Class;Lkotlin/reflect/KTypeProjection;)Lkotlin/reflect/KType;", false, kotlin_reflection_class),
     ne!("Lkotlin/jvm/internal/Reflection;", "nullableTypeOf", "(Ljava/lang/Class;)Lkotlin/reflect/KType;", false, kotlin_reflection_class),
     ne!("Lkotlin/reflect/KTypeProjection$Companion;", "invariant", "(Lkotlin/reflect/KType;)Lkotlin/reflect/KTypeProjection;", true, kotlin_type_projection_invariant),
+    ne!("Ljava/lang/Class;", "getClassifier", "()Lkotlin/reflect/KClassifier;", true, kotlin_reflection_class),
     ne!("Lkotlin/ExceptionsKt;", "stackTraceToString", "(Ljava/lang/Throwable;)Ljava/lang/String;", false, exceptions_stack_trace_to_string),
     ne!("Lkotlin/ExceptionsKt;", "addSuppressed", "(Ljava/lang/Throwable;Ljava/lang/Throwable;)V", false, exceptions_add_suppressed),
     ne!("Lkotlin/concurrent/ThreadsKt;", "thread$default", "(ZZLjava/lang/ClassLoader;Ljava/lang/String;ILkotlin/jvm/functions/Function0;ILjava/lang/Object;)Ljava/lang/Thread;", false, threads_kt_thread_default),

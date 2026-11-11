@@ -124,7 +124,7 @@ VM/bridge fixes from this sweep:
 ### MIXED/NSFW zh sweep (2026-11-12)
 
 Same harness over the 35 `CONTENT_WARNING_MIXED` + 39 `CONTENT_WARNING_NSFW`
-zh extensions: **31 of 74 pass** the full flow. Notable passes:
+zh extensions: **32 of 74 pass** the full flow. Notable passes:
 
 | Source | Result |
 |---|---|
@@ -136,6 +136,7 @@ zh extensions: **31 of 74 pass** the full flow. Notable passes:
 | NHentai.to 1.6.12 / NHentai.xxx 1.6.13 | 24–25 / 1 / 85–162, 238–283 KB |
 | 3Hentai 1.6.7 | 25 / 1 / 236, 347 KB |
 | 92漫画 1.6.1 | 36 / 96 / 49, 199 KB |
+| 米卡漫画 1.6.1 | 25 / 1 / 3, 595 KB JPEG |
 | CManhua 1.6.1 | 12 / 48 / 1, 134 KB webp |
 | HANMAN18 / Manga Xiao Si | 20 / 326–336 / 156, 61–62 KB |
 | dm5, Komiic, manhuagui, kaobeimanhua, 极速漫画, 比卡漫画 … | unchanged |
@@ -161,9 +162,11 @@ Shims added for this sweep: `Cookie.Companion`, `okhttp3.Protocol`,
 `Instant.epochSeconds`, `ArrayDeque.size/addAll`, `ListIterator.hasPrevious/
 previous`, `DateTimeFormatter.withZone`, `DateTimeFormatterBuilder.
 parseCaseInsensitive`, `okio.BufferedSource/Buffer.readByteArray(J)`,
-jsoup `Element : Node`, `CompletableDeferred(value)`,
-`MatchGroupCollection`/`MatchGroup`, `SharedPreferences.getAll` and
-`WebView.getWebViewClassLoader`.
+jsoup `Element : Node` and `Element.isBlock`, `CompletableDeferred(value)` /
+`await` / `complete`, `MatchGroupCollection`/`MatchGroup` (allocated as the
+declared collection class), `SharedPreferences.getAll`,
+`WebView.getWebViewClassLoader`, `Class.getClassifier`, and
+`kotlin.time.Instant` compareTo/minus/toString.
 
 ### Old 1.6 notes (2026-11-09, kept for history)
 
