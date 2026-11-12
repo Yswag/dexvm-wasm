@@ -181,6 +181,25 @@ Later shims: RSA (`java.security.spec.X509EncodedKeySpec`,
 FormBody `writeTo` form-encoding, and `KFunction`/receiver on
 `FunctionReferenceImpl`.
 
+### Inverse gap scan (2026-11-12)
+
+Instead of copying Suwayomi's `AndroidCompat` class list, the corpus was
+scanned directly: every dex in the 97 zh APKs was parsed for its type table,
+defined classes were subtracted, and the result was diffed against the shims
+already in the VM. 592 external classes, 162 not referenced by any shim.
+
+Only a handful have non-trivial reference counts, and none are "missing
+Android support" — they are small surface classes: `kotlin.enums.EnumEntries`,
+`okhttp3.Connection`, `android.os.LocaleList`, `java.util.Locale$Builder`,
+`kotlinx.serialization.Serializable`, `CoroutineStart`, the
+`Float/Double/IntArray/JsonArray/JsonObject` serializers, `Layout$Alignment`,
+`MultipartBody`, and WebView preference/callback interfaces. These are now
+shimmed (with real `LocaleList` / `Locale.Builder` / multipart media types /
+serializer behavior); the rest are annotations or unused platform internals.
+
+Suwayomi's compat layer is JVM Java over AWT/JCE/JCEF and cannot be dropped
+into a wasm DEX engine; it is useful only as a behavior reference.
+
 ### Old 1.6 notes (2026-11-09, kept for history)
 
 Initial shims before the VM fixes: `Json.Default` singleton + inheritance,

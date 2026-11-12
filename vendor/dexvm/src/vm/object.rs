@@ -180,6 +180,8 @@ pub enum PrimitiveSerializerKind {
     String,
     Int,
     Long,
+    Float,
+    Double,
 }
 
 /// protobuf wire-format value (kotlinx-serialization-protobuf shim).
@@ -1235,3 +1237,4 @@ impl Arena {
         self.objects.len() - self.free.len()
     }
 }
+

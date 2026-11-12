@@ -926,6 +926,32 @@ pub(crate) fn lazy_cookie_companion(vm: &mut Vm) -> JValue {
 }
 
 /// wasm: `okhttp3.Protocol` constants.
+fn media_type_const(vm: &mut Vm, value: &str) -> JValue {
+    alloc(vm, "Lokhttp3/MediaType;", Native::Str(value.into())).unwrap_or(JValue::Null)
+}
+
+pub(crate) fn lazy_media_type_form(vm: &mut Vm) -> JValue {
+    media_type_const(vm, "multipart/form-data")
+}
+pub(crate) fn lazy_media_type_mixed(vm: &mut Vm) -> JValue {
+    media_type_const(vm, "multipart/mixed")
+}
+pub(crate) fn lazy_media_type_alternate(vm: &mut Vm) -> JValue {
+    media_type_const(vm, "multipart/alternative")
+}
+pub(crate) fn lazy_media_type_digest(vm: &mut Vm) -> JValue {
+    media_type_const(vm, "multipart/digest")
+}
+pub(crate) fn lazy_media_type_parallel(vm: &mut Vm) -> JValue {
+    media_type_const(vm, "multipart/parallel")
+}
+
+/// wasm: `Connection.protocol()` — the shim has no real connection, so report
+/// HTTP/1.1.
+pub(crate) fn connection_protocol(vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(lazy_protocol(vm))
+}
+
 pub(crate) fn lazy_protocol(vm: &mut Vm) -> JValue {
     opaque_inst(vm, "Lokhttp3/Protocol;")
 }
@@ -2995,6 +3021,7 @@ pub(crate) const OKHTTP_TABLE: &[NativeEntry] = &[
     ne!("Lokhttp3/Request$Builder;", "tag", "(Ljava/lang/Object;)Lokhttp3/Request$Builder;", true, request_builder_tag),
     ne!("Lokhttp3/Request$Builder;", "tag", "(Lkotlin/reflect/KClass;Ljava/lang/Object;)Lokhttp3/Request$Builder;", true, request_builder_tag2),
     ne!("Lokhttp3/FormBody$Builder;", "addEncoded", "(Ljava/lang/String;Ljava/lang/String;)Lokhttp3/FormBody$Builder;", true, okhttp_form_builder_add),
+    ne!("Lokhttp3/Connection;", "protocol", "()Lokhttp3/Protocol;", true, connection_protocol),
     ne!("Lokhttp3/FormBody;", "value", "(I)Ljava/lang/String;", true, form_body_value),
     ne!("Lokhttp3/FormBody;", "name", "(I)Ljava/lang/String;", true, form_body_name),
     ne!("Lokhttp3/FormBody;", "size", "()I", true, form_body_size),

@@ -109,7 +109,7 @@ pub(crate) mod jsoup;
 #[cfg(feature = "tachiyomi")]
 pub mod keiyoushi;
 pub(crate) mod kotlin;
-mod kotlinx;
+pub(crate) mod kotlinx;
 #[cfg(feature = "okhttp")]
 pub(crate) mod okhttp;
 #[cfg(feature = "okhttp")]
@@ -1256,3 +1256,4 @@ pub(crate) fn comma_group(mut s: String) -> String {
     }
     out
 }
+

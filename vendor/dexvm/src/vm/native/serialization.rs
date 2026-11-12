@@ -664,6 +664,18 @@ fn run_serializer(vm: &mut Vm, serializer: JValue, element: JValue, module: Opti
                     JsonVal::Str(v) => v.parse().unwrap_or_default(),
                     _ => 0,
                 }),
+                PrimitiveSerializerKind::Float => JValue::Float(match value {
+                    JsonVal::Int(v) => v as f32,
+                    JsonVal::Double(v) => v as f32,
+                    JsonVal::Str(v) => v.parse().unwrap_or_default(),
+                    _ => 0.0,
+                }),
+                PrimitiveSerializerKind::Double => JValue::Double(match value {
+                    JsonVal::Int(v) => v as f64,
+                    JsonVal::Double(v) => v,
+                    JsonVal::Str(v) => v.parse().unwrap_or_default(),
+                    _ => 0.0,
+                }),
             });
         }
         Some(Native::ArrayListSerializer { child }) => *child,
@@ -739,6 +751,8 @@ fn run_serializer_encode(
                 PrimitiveSerializerKind::String => JsonVal::Str(jstr(vm, value)?),
                 PrimitiveSerializerKind::Int => JsonVal::Int(i64::from(int_of(vm, value))),
                 PrimitiveSerializerKind::Long => JsonVal::Int(long_of(vm, value)),
+                PrimitiveSerializerKind::Float => JsonVal::Double(f64::from(float_of(vm, value))),
+                PrimitiveSerializerKind::Double => JsonVal::Double(double_of(vm, value)),
             });
         }
         Some(Native::ArrayListSerializer { child }) => {
@@ -1325,6 +1339,33 @@ pub(crate) fn lazy_boolean_serializer(vm: &mut Vm) -> JValue {
         "Lkotlinx/serialization/internal/BooleanSerializer;",
         PrimitiveSerializerKind::Int,
     )
+}
+
+pub(crate) fn lazy_float_serializer(vm: &mut Vm) -> JValue {
+    lazy_primitive_serializer(
+        vm,
+        "Lkotlinx/serialization/internal/FloatSerializer;",
+        PrimitiveSerializerKind::Float,
+    )
+}
+
+pub(crate) fn lazy_double_serializer(vm: &mut Vm) -> JValue {
+    lazy_primitive_serializer(
+        vm,
+        "Lkotlinx/serialization/internal/DoubleSerializer;",
+        PrimitiveSerializerKind::Double,
+    )
+}
+
+/// `IntArraySerializer`: decoding/encoding goes through the element
+/// serializer, which the generic Json path handles for arrays.
+pub(crate) fn lazy_int_array_serializer(vm: &mut Vm) -> JValue {
+    alloc(
+        vm,
+        "Lkotlinx/serialization/internal/IntArraySerializer;",
+        Native::Opaque,
+    )
+    .unwrap_or(JValue::Null)
 }
 
 // ---------------------------------------------------------------------------
@@ -2077,6 +2118,18 @@ fn primitive_serializer_deserialize(vm: &mut Vm, args: &[JValue]) -> R {
             JsonVal::Double(v) => v as i64,
             JsonVal::Str(v) => v.parse().unwrap_or_default(),
             _ => 0,
+        }),
+        PrimitiveSerializerKind::Float => JValue::Float(match value {
+            JsonVal::Int(v) => v as f32,
+            JsonVal::Double(v) => v as f32,
+            JsonVal::Str(v) => v.parse().unwrap_or_default(),
+            _ => 0.0,
+        }),
+        PrimitiveSerializerKind::Double => JValue::Double(match value {
+            JsonVal::Int(v) => v as f64,
+            JsonVal::Double(v) => v,
+            JsonVal::Str(v) => v.parse().unwrap_or_default(),
+            _ => 0.0,
         }),
     })
 }
@@ -2869,6 +2922,8 @@ pub(crate) const SERIALIZATION_TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/serialization/internal/StringSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, primitive_serializer_deserialize),
     ne!("Lkotlinx/serialization/internal/IntSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, primitive_serializer_deserialize),
     ne!("Lkotlinx/serialization/internal/LongSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, primitive_serializer_deserialize),
+    ne!("Lkotlinx/serialization/internal/FloatSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, primitive_serializer_deserialize),
+    ne!("Lkotlinx/serialization/internal/DoubleSerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, primitive_serializer_deserialize),
     ne!("Lkotlinx/serialization/internal/LinkedHashMapSerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, linked_hash_map_descriptor),
     ne!("Lkotlinx/serialization/json/JsonObject$Companion;", "serializer", "()Lkotlinx/serialization/KSerializer;", true, json_element_serializer_marker),
     ne!("Lkotlinx/serialization/json/JsonArray$Companion;", "serializer", "()Lkotlinx/serialization/KSerializer;", true, json_element_serializer_marker),

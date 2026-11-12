@@ -89,6 +89,68 @@ pub(crate) fn locale_for_language_tag(vm: &mut Vm, args: &[JValue]) -> R {
     alloc(vm, "Ljava/util/Locale;", Native::Str(tag))
 }
 
+pub(crate) fn locale_to_language_tag(vm: &mut Vm, args: &[JValue]) -> R {
+    let tag = locale_tag(vm, args[0]).replace('_', "-");
+    Ok(new_str(vm, &tag))
+}
+
+fn locale_builder_segments(vm: &Vm, v: JValue) -> Option<Vec<String>> {
+    match payload(vm, v) {
+        Some(Native::Str(s)) => Some(s.split('\u{1f}').map(str::to_string).collect()),
+        _ => None,
+    }
+}
+
+fn locale_builder_init(vm: &mut Vm, args: &[JValue]) -> R {
+    let JValue::Obj(id) = args[0] else {
+        return Err(npe(vm));
+    };
+    let Some(object) = vm.arena.objects.get_mut(id as usize) else {
+        return Err(npe(vm));
+    };
+    object.native = Some(Native::Str("\u{1f}\u{1f}\u{1f}".into()));
+    Ok(JValue::Null)
+}
+
+fn locale_builder_set(vm: &mut Vm, args: &[JValue], slot: usize) -> R {
+    let value = jstr(vm, args[1])?;
+    let mut parts = locale_builder_segments(vm, args[0]).ok_or_else(|| npe(vm))?;
+    while parts.len() < 4 {
+        parts.push(String::new());
+    }
+    parts[slot] = value;
+    let Some(Native::Str(s)) = payload_mut(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    *s = parts.join("\u{1f}");
+    Ok(args[0])
+}
+
+pub(crate) fn locale_builder_set_language(vm: &mut Vm, args: &[JValue]) -> R {
+    locale_builder_set(vm, args, 0)
+}
+pub(crate) fn locale_builder_set_script(vm: &mut Vm, args: &[JValue]) -> R {
+    locale_builder_set(vm, args, 1)
+}
+pub(crate) fn locale_builder_set_region(vm: &mut Vm, args: &[JValue]) -> R {
+    locale_builder_set(vm, args, 2)
+}
+pub(crate) fn locale_builder_set_variant(vm: &mut Vm, args: &[JValue]) -> R {
+    locale_builder_set(vm, args, 3)
+}
+
+pub(crate) fn locale_builder_build(vm: &mut Vm, args: &[JValue]) -> R {
+    let parts = locale_builder_segments(vm, args[0]).ok_or_else(|| npe(vm))?;
+    let mut tag = parts.first().cloned().unwrap_or_default();
+    for part in parts.iter().skip(1) {
+        if !part.is_empty() {
+            tag.push('-');
+            tag.push_str(part);
+        }
+    }
+    alloc(vm, "Ljava/util/Locale;", Native::Str(tag))
+}
+
 /// Native methods for Ljava/util/Locale;
 pub(crate) const TABLE: &[NativeEntry] = &[
     ne!(
@@ -167,5 +229,54 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(Ljava/util/Locale;)Ljava/lang/String;",
         true,
         locale_to_string
+    ),
+    ne!(
+        "Ljava/util/Locale;",
+        "toLanguageTag",
+        "()Ljava/lang/String;",
+        true,
+        locale_to_language_tag
+    ),
+    ne!(
+        "Ljava/util/Locale$Builder;",
+        "<init>",
+        "()V",
+        true,
+        locale_builder_init
+    ),
+    ne!(
+        "Ljava/util/Locale$Builder;",
+        "setLanguage",
+        "(Ljava/lang/String;)Ljava/util/Locale$Builder;",
+        true,
+        locale_builder_set_language
+    ),
+    ne!(
+        "Ljava/util/Locale$Builder;",
+        "setScript",
+        "(Ljava/lang/String;)Ljava/util/Locale$Builder;",
+        true,
+        locale_builder_set_script
+    ),
+    ne!(
+        "Ljava/util/Locale$Builder;",
+        "setRegion",
+        "(Ljava/lang/String;)Ljava/util/Locale$Builder;",
+        true,
+        locale_builder_set_region
+    ),
+    ne!(
+        "Ljava/util/Locale$Builder;",
+        "setVariant",
+        "(Ljava/lang/String;)Ljava/util/Locale$Builder;",
+        true,
+        locale_builder_set_variant
+    ),
+    ne!(
+        "Ljava/util/Locale$Builder;",
+        "build",
+        "()Ljava/util/Locale;",
+        true,
+        locale_builder_build
     ),
 ];

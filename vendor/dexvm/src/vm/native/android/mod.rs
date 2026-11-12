@@ -1329,6 +1329,49 @@ fn parcel_fd_open(vm: &mut Vm, _args: &[JValue]) -> R {
 // android.webkit stubs (no real webview on the host)
 // ---------------------------------------------------------------------------
 
+fn alignment_const(vm: &mut Vm, tag: &str) -> JValue {
+    alloc(vm, "Landroid/text/Layout$Alignment;", Native::Str(tag.into())).unwrap_or(JValue::Null)
+}
+
+pub(crate) fn lazy_alignment_normal(vm: &mut Vm) -> JValue {
+    alignment_const(vm, "ALIGN_NORMAL")
+}
+pub(crate) fn lazy_alignment_center(vm: &mut Vm) -> JValue {
+    alignment_const(vm, "ALIGN_CENTER")
+}
+pub(crate) fn lazy_alignment_opposite(vm: &mut Vm) -> JValue {
+    alignment_const(vm, "ALIGN_OPPOSITE")
+}
+
+pub(crate) fn lazy_console_level(vm: &mut Vm) -> JValue {
+    alloc(
+        vm,
+        "Landroid/webkit/ConsoleMessage$MessageLevel;",
+        Native::Str("LOG".into()),
+    )
+    .unwrap_or(JValue::Null)
+}
+
+/// `LocaleList.getDefault()` — a single locale (the host default).
+fn locale_list_default(vm: &mut Vm, _args: &[JValue]) -> R {
+    let locale = crate::vm::native::lazy_opaque_locale(vm);
+    alloc(vm, "Landroid/os/LocaleList;", Native::List(vec![locale]))
+}
+
+fn locale_list_get(vm: &mut Vm, args: &[JValue]) -> R {
+    let i = int_of(vm, args[1]).max(0) as usize;
+    let Some(Native::List(items)) = payload(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    Ok(items.get(i).copied().unwrap_or(JValue::Null))
+}
+
+fn locale_list_size(vm: &mut Vm, args: &[JValue]) -> R {
+    let Some(Native::List(items)) = payload(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    Ok(JValue::Int(items.len() as i32))
+}
 const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 DexVM/0.1";
 
 fn webview_init(_vm: &mut Vm, _args: &[JValue]) -> R {
@@ -2100,6 +2143,27 @@ pub(crate) const ANDROID_TABLE: &[NativeEntry] = &[
         "(Ljava/lang/String;I)[B",
         false,
         base64_decode
+    ),
+    ne!(
+        "Landroid/os/LocaleList;",
+        "getDefault",
+        "()Landroid/os/LocaleList;",
+        false,
+        locale_list_default
+    ),
+    ne!(
+        "Landroid/os/LocaleList;",
+        "get",
+        "(I)Ljava/util/Locale;",
+        true,
+        locale_list_get
+    ),
+    ne!(
+        "Landroid/os/LocaleList;",
+        "size",
+        "()I",
+        true,
+        locale_list_size
     ),
     ne!(
         "Landroid/util/Base64;",
@@ -3303,3 +3367,4 @@ pub(crate) fn elpased_realtime(_vm: &mut Vm, _args: &[JValue]) -> R {
 
 #[cfg(test)]
 mod tests;
+

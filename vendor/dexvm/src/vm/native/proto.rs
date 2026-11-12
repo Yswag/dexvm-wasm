@@ -525,6 +525,12 @@ fn wire_value_as(vm: &mut Vm, v: &WireValue, serializer: JValue) -> PR {
                 },
                 crate::vm::object::PrimitiveSerializerKind::Int => JValue::Int(wire_to_int(v)),
                 crate::vm::object::PrimitiveSerializerKind::Long => JValue::Long(wire_to_long(v)),
+                crate::vm::object::PrimitiveSerializerKind::Float => {
+                    JValue::Float(wire_to_double(v) as f32)
+                }
+                crate::vm::object::PrimitiveSerializerKind::Double => {
+                    JValue::Double(wire_to_double(v))
+                }
             });
         }
         _ => {}

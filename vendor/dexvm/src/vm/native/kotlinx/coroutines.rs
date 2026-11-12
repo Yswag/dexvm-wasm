@@ -113,6 +113,11 @@ pub(crate) fn coroutines_launch_default(vm: &mut Vm, args: &[JValue]) -> R {
 }
 /// `delay(millis, continuation)`: this VM runs coroutines synchronously, so
 /// there's nothing to actually suspend for — just resume immediately.
+/// wasm: `CoroutineStart` constants.
+pub(crate) fn lazy_coroutine_start(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/coroutines/CoroutineStart;", Native::Opaque).unwrap_or(JValue::Null)
+}
+
 pub(crate) fn coroutines_delay(vm: &mut Vm, _args: &[JValue]) -> R {
     Ok(lazy_unit_instance(vm))
 }

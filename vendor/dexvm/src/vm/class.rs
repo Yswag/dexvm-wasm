@@ -4415,6 +4415,332 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     ),
     #[cfg(feature = "tachiyomi")]
     shim!("Lrx/Subscription;", Some("Ljava/lang/Object;"), &[], 0),
+    // gap-scan additions: classes referenced across the zh corpus
+    shim!(
+        "Lkotlin/enums/EnumEntries;",
+        None,
+        &["Ljava/util/List;"],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Lkotlin/Metadata;",
+        None,
+        &["Ljava/lang/annotation/Annotation;"],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Lkotlinx/serialization/Serializable;",
+        None,
+        &["Ljava/lang/annotation/Annotation;"],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Lkotlinx/serialization/internal/FloatSerializer;",
+        Some("Ljava/lang/Object;"),
+        &["Lkotlinx/serialization/KSerializer;"],
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Lkotlinx/serialization/internal/FloatSerializer;",
+            ShimValue::Lazy(native::lazy_float_serializer)
+        )]
+    ),
+    shim!(
+        "Lkotlinx/serialization/internal/DoubleSerializer;",
+        Some("Ljava/lang/Object;"),
+        &["Lkotlinx/serialization/KSerializer;"],
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Lkotlinx/serialization/internal/DoubleSerializer;",
+            ShimValue::Lazy(native::lazy_double_serializer)
+        )]
+    ),
+    shim!(
+        "Lkotlinx/serialization/internal/IntArraySerializer;",
+        Some("Ljava/lang/Object;"),
+        &["Lkotlinx/serialization/KSerializer;"],
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Lkotlinx/serialization/internal/IntArraySerializer;",
+            ShimValue::Lazy(native::lazy_int_array_serializer)
+        )]
+    ),
+    shim!(
+        "Lkotlinx/serialization/json/JsonArraySerializer;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Lkotlinx/serialization/json/JsonArraySerializer;",
+            ShimValue::Lazy(native::lazy_json_element_serializer)
+        )]
+    ),
+    shim!(
+        "Lkotlinx/serialization/json/JsonObjectSerializer;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Lkotlinx/serialization/json/JsonObjectSerializer;",
+            ShimValue::Lazy(native::lazy_json_element_serializer)
+        )]
+    ),
+    shim!(
+        "Lkotlinx/coroutines/CoroutineStart;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [
+            sdef!("DEFAULT", "Lkotlinx/coroutines/CoroutineStart;", ShimValue::Lazy(native::kotlinx::coroutines::lazy_coroutine_start)),
+            sdef!("LAZY", "Lkotlinx/coroutines/CoroutineStart;", ShimValue::Lazy(native::kotlinx::coroutines::lazy_coroutine_start)),
+            sdef!("ATOMIC", "Lkotlinx/coroutines/CoroutineStart;", ShimValue::Lazy(native::kotlinx::coroutines::lazy_coroutine_start)),
+            sdef!("UNDISPATCHED", "Lkotlinx/coroutines/CoroutineStart;", ShimValue::Lazy(native::kotlinx::coroutines::lazy_coroutine_start)),
+        ]
+    ),
+    shim!(
+        "Lkotlinx/coroutines/TimeoutCancellationException;",
+        Some("Ljava/util/concurrent/CancellationException;"),
+        &[],
+        0
+    ),
+    shim!("Lokhttp3/Connection;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        "Lokhttp3/Callback;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Lokhttp3/MultipartBody;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [
+            sdef!("FORM", "Lokhttp3/MediaType;", ShimValue::Lazy(native::lazy_media_type_form)),
+            sdef!("MIXED", "Lokhttp3/MediaType;", ShimValue::Lazy(native::lazy_media_type_mixed)),
+            sdef!("ALTERNATE", "Lokhttp3/MediaType;", ShimValue::Lazy(native::lazy_media_type_alternate)),
+            sdef!("DIGEST", "Lokhttp3/MediaType;", ShimValue::Lazy(native::lazy_media_type_digest)),
+            sdef!("PARALLEL", "Lokhttp3/MediaType;", ShimValue::Lazy(native::lazy_media_type_parallel)),
+        ]
+    ),
+    shim!(
+        "Lokhttp3/MultipartBody$Builder;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!("Landroid/os/LocaleList;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        "Ljava/util/Locale$Builder;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Landroid/text/Layout$Alignment;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [
+            sdef!("ALIGN_NORMAL", "Landroid/text/Layout$Alignment;", ShimValue::Lazy(native::android::lazy_alignment_normal)),
+            sdef!("ALIGN_CENTER", "Landroid/text/Layout$Alignment;", ShimValue::Lazy(native::android::lazy_alignment_center)),
+            sdef!("ALIGN_OPPOSITE", "Landroid/text/Layout$Alignment;", ShimValue::Lazy(native::android::lazy_alignment_opposite)),
+        ]
+    ),
+    shim!(
+        "Landroid/text/TextWatcher;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Landroid/view/ViewParent;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Landroid/text/Spanned;",
+        None,
+        &["Ljava/lang/CharSequence;"],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Landroid/text/style/MetricAffectingSpan;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Landroid/widget/Button;",
+        Some("Landroid/widget/TextView;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Landroidx/preference/EditTextPreference$OnBindEditTextListener;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Landroid/webkit/ValueCallback;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Landroid/webkit/WebResourceError;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Landroid/webkit/ConsoleMessage$MessageLevel;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [
+            sdef!("TIP", "Landroid/webkit/ConsoleMessage$MessageLevel;", ShimValue::Lazy(native::android::lazy_console_level)),
+            sdef!("LOG", "Landroid/webkit/ConsoleMessage$MessageLevel;", ShimValue::Lazy(native::android::lazy_console_level)),
+            sdef!("WARNING", "Landroid/webkit/ConsoleMessage$MessageLevel;", ShimValue::Lazy(native::android::lazy_console_level)),
+            sdef!("ERROR", "Landroid/webkit/ConsoleMessage$MessageLevel;", ShimValue::Lazy(native::android::lazy_console_level)),
+        ]
+    ),
+    shim!(
+        "Landroid/webkit/JavascriptInterface;",
+        None,
+        &["Ljava/lang/annotation/Annotation;"],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Ljavax/net/ssl/SSLSession;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Ljava/lang/reflect/InvocationHandler;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Ljava/lang/ref/Reference;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Ljava/lang/ref/WeakReference;",
+        Some("Ljava/lang/ref/Reference;"),
+        &[],
+        0
+    ),
+    shim!("Ljava/util/Properties;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!("Ljava/util/zip/CRC32;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        "Ljava/util/zip/ZipException;",
+        Some("Ljava/lang/Exception;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Ljava/util/concurrent/CopyOnWriteArraySet;",
+        Some("Ljava/util/concurrent/CopyOnWriteArrayList;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Ljava/util/concurrent/ConcurrentHashMap$KeySetView;",
+        Some("Ljava/util/AbstractSet;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Lkotlin/jvm/internal/TypeIntrinsics;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Lkotlin/jvm/internal/markers/KMutableList;",
+        None,
+        &["Ljava/util/List;"],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Lkotlin/jvm/internal/AdaptedFunctionReference;",
+        Some("Lkotlin/jvm/internal/FunctionReferenceImpl;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Lkotlin/ranges/OpenEndRange;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Lkotlin/collections/Grouping;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Landroid/util/Patterns;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Landroid/content/res/Configuration;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!("Landroid/view/Window;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!("Landroid/app/Dialog;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        "Landroid/content/DialogInterface;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Landroid/content/DialogInterface$OnDismissListener;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Landroid/content/DialogInterface$OnCancelListener;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Landroid/app/Application$ActivityLifecycleCallbacks;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Landroid/graphics/drawable/Drawable;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Landroid/graphics/drawable/ColorDrawable;",
+        Some("Landroid/graphics/drawable/Drawable;"),
+        &[],
+        0
+    ),
 ];
 
 #[derive(Debug, Clone, Default)]
