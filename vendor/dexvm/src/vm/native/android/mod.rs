@@ -1329,6 +1329,80 @@ fn parcel_fd_open(vm: &mut Vm, _args: &[JValue]) -> R {
 // android.webkit stubs (no real webview on the host)
 // ---------------------------------------------------------------------------
 
+fn lru_cache_init(vm: &mut Vm, args: &[JValue]) -> R {
+    let Some(JValue::Obj(id)) = args.first().copied() else {
+        return Err(npe(vm));
+    };
+    if let Some(object) = vm.arena.objects.get_mut(id as usize) {
+        object.native = Some(Native::Map(Vec::new()));
+    }
+    Ok(JValue::Null)
+}
+
+fn lru_cache_get(vm: &mut Vm, args: &[JValue]) -> R {
+    let entries = match payload(vm, args[0]) {
+        Some(Native::Map(entries)) => entries.clone(),
+        _ => return Err(npe(vm)),
+    };
+    match map_find(vm, &entries, args[1])? {
+        Some(i) => Ok(entries[i].1),
+        None => Ok(JValue::Null),
+    }
+}
+
+fn lru_cache_put(vm: &mut Vm, args: &[JValue]) -> R {
+    let (key, value) = (args[1], args[2]);
+    let mut entries = match payload(vm, args[0]) {
+        Some(Native::Map(entries)) => entries.clone(),
+        _ => return Err(npe(vm)),
+    };
+    let old = match map_find(vm, &entries, key)? {
+        Some(i) => {
+            let old = entries[i].1;
+            entries[i].1 = value;
+            old
+        }
+        None => {
+            entries.push((key, value));
+            JValue::Null
+        }
+    };
+    if let Some(Native::Map(dst)) = payload_mut(vm, args[0]) {
+        *dst = entries;
+    }
+    Ok(old)
+}
+
+fn lru_cache_remove(vm: &mut Vm, args: &[JValue]) -> R {
+    let mut entries = match payload(vm, args[0]) {
+        Some(Native::Map(entries)) => entries.clone(),
+        _ => return Err(npe(vm)),
+    };
+    let old = match map_find(vm, &entries, args[1])? {
+        Some(i) => entries.remove(i).1,
+        None => JValue::Null,
+    };
+    if let Some(Native::Map(dst)) = payload_mut(vm, args[0]) {
+        *dst = entries;
+    }
+    Ok(old)
+}
+
+fn lru_cache_size(vm: &mut Vm, args: &[JValue]) -> R {
+    let entries = match payload(vm, args[0]) {
+        Some(Native::Map(entries)) => entries,
+        _ => return Err(npe(vm)),
+    };
+    Ok(JValue::Int(entries.len() as i32))
+}
+
+fn lru_cache_evict_all(vm: &mut Vm, args: &[JValue]) -> R {
+    if let Some(Native::Map(dst)) = payload_mut(vm, args[0]) {
+        dst.clear();
+    }
+    Ok(JValue::Null)
+}
+
 fn alignment_const(vm: &mut Vm, tag: &str) -> JValue {
     alloc(vm, "Landroid/text/Layout$Alignment;", Native::Str(tag.into())).unwrap_or(JValue::Null)
 }
@@ -3107,14 +3181,42 @@ pub(crate) const ANDROID_TABLE: &[NativeEntry] = &[
         "<init>",
         "(I)V",
         true,
-        ui_noop
+        lru_cache_init
     ),
     ne!(
         "Landroid/util/LruCache;",
         "get",
         "(Ljava/lang/Object;)Ljava/lang/Object;",
         true,
-        ui_null
+        lru_cache_get
+    ),
+    ne!(
+        "Landroid/util/LruCache;",
+        "put",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+        true,
+        lru_cache_put
+    ),
+    ne!(
+        "Landroid/util/LruCache;",
+        "remove",
+        "(Ljava/lang/Object;)Ljava/lang/Object;",
+        true,
+        lru_cache_remove
+    ),
+    ne!(
+        "Landroid/util/LruCache;",
+        "size",
+        "()I",
+        true,
+        lru_cache_size
+    ),
+    ne!(
+        "Landroid/util/LruCache;",
+        "evictAll",
+        "()V",
+        true,
+        lru_cache_evict_all
     ),
     // ---- android.content.res / android.app ----
     ne!(

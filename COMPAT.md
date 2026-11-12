@@ -124,7 +124,7 @@ VM/bridge fixes from this sweep:
 ### MIXED/NSFW zh sweep (2026-11-12)
 
 Same harness over the 35 `CONTENT_WARNING_MIXED` + 39 `CONTENT_WARNING_NSFW`
-zh extensions: **34 of 74 pass** the full flow (site flakiness moves one or
+zh extensions: **36 of 74 pass** the full flow (site flakiness moves one or
 two either way; every remaining failure is a site/credentials issue or a
 missing bundled library, not a VM trap). Notable passes:
 
@@ -138,6 +138,7 @@ missing bundled library, not a VM trap). Notable passes:
 | NHentai.to 1.6.12 / NHentai.xxx 1.6.13 | 24–25 / 1 / 85–162, 238–283 KB |
 | 3Hentai 1.6.7 | 25 / 1 / 236, 347 KB |
 | 92漫画 1.6.1 | 36 / 96 / 49, 199 KB |
+| Pixiv 1.6.1 | 50 / 2 / 14, 4.8 MB JPEG |
 | 米卡漫画 1.6.1 | 25 / 1 / 3, 595 KB JPEG |
 | CManhua 1.6.1 | 12 / 48 / 1, 134 KB webp |
 | HANMAN18 / Manga Xiao Si | 20 / 326–336 / 156, 61–62 KB |
@@ -189,6 +190,15 @@ as raw ints in generic collections (now boxed `Character`, so R8's
 now throws a catchable NPE and logs the method instead of panicking.
 `MatchResult.getRange()` was added. `JValue::as_*` panics now report the
 call site via `#[track_caller]`.
+
+Next VM-semantics fixes (Pixiv and 90漫画 now pass): `new-instance` fills
+object fields with JVM defaults instead of null (`Ref$IntRef.element` read as
+null before its first write); shim `alloc` does the same for host-allocated
+objects; `SuspendLambda`/`RestrictedSuspendLambda` extend `ContinuationImpl`
+so suspend lambdas satisfy `Continuation` casts; `android.util.LruCache` is a
+real map (`put/get/remove/size/evictAll`); `BigInteger` gained
+`and/or/xor` and `ZERO/ONE/TWO/TEN`. Safe-zh now 9/23 (包子漫画 closed its
+gatekeeper).
 
 ### Inverse gap scan (2026-11-12)
 

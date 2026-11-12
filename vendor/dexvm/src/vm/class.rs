@@ -1880,7 +1880,7 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     ),
     shim!(
         "Lkotlin/coroutines/jvm/internal/SuspendLambda;",
-        Some("Ljava/lang/Object;"),
+        Some("Lkotlin/coroutines/jvm/internal/ContinuationImpl;"),
         &[],
         0
     ),
@@ -2341,7 +2341,7 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     #[cfg(feature = "kotlin")]
     shim!(
         "Lkotlin/coroutines/jvm/internal/RestrictedSuspendLambda;",
-        Some("Ljava/lang/Object;"),
+        Some("Lkotlin/coroutines/jvm/internal/SuspendLambda;"),
         &[],
         0
     ),
@@ -4159,7 +4159,18 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     shim!("Ljava/util/TreeMap;", Some("Ljava/lang/Object;"), &[], 0),
     shim!("Ljava/util/UUID;", Some("Ljava/lang/Object;"), &[], 0),
     shim!("Ljava/math/BigDecimal;", Some("Ljava/lang/Object;"), &[], 0),
-    shim!("Ljava/math/BigInteger;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        "Ljava/math/BigInteger;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [
+            sdef!("ZERO", "Ljava/math/BigInteger;", ShimValue::Lazy(native::lazy_bigint_zero)),
+            sdef!("ONE", "Ljava/math/BigInteger;", ShimValue::Lazy(native::lazy_bigint_one)),
+            sdef!("TWO", "Ljava/math/BigInteger;", ShimValue::Lazy(native::lazy_bigint_two)),
+            sdef!("TEN", "Ljava/math/BigInteger;", ShimValue::Lazy(native::lazy_bigint_ten)),
+        ]
+    ),
     // wasm: 1.6-era sources read RoundingMode enum constants before calling
     // BigDecimal.setScale(int, RoundingMode); the native ignores the mode.
     shim!(

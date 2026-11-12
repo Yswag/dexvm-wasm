@@ -3,6 +3,10 @@
 mod bigdecimal;
 mod biginteger;
 
+pub(crate) use biginteger::{
+    lazy_bigint_one, lazy_bigint_ten, lazy_bigint_two, lazy_bigint_zero,
+};
+
 use crate::vm::native::*;
 
 /// wasm: materializer for the `RoundingMode` enum constants; the object is

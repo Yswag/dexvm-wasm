@@ -530,9 +530,9 @@ impl Vm {
                             );
                         }
                         debug!(
-                            "DBG throw pc={:04x} cls={} msg={:?}",
+                            "DBG throw pc={:04x} at {} msg={:?}",
                             f.pc,
-                            self.class_desc_str(f.class),
+                            self.method_desc_str(f.class, f.slot),
                             m
                         );
                         if m.is_empty() {
@@ -875,11 +875,20 @@ impl Vm {
                 if let JValue::Obj(o) = f.regs[*d as usize] {
                     let oc = self.arena.objects[o as usize].class;
                     if !self.is_assignable(oc, target)? {
-                        return Ok(StepOutcome::Throw(JValue::Obj(self.err_cce(format!(
+                        let msg = format!(
                             "{} cannot be cast to {}",
                             self.class_desc_str(oc),
                             self.dex_at(f.dex).type_descriptor(*type_idx)
-                        )))));
+                        );
+                        log::warn!(
+                            "check-cast failed in {}::{}: {}",
+                            self.class_desc_str(f.class),
+                            self.str_of(
+                                self.classes[f.class as usize].methods[f.slot as usize].name
+                            ),
+                            msg
+                        );
+                        return Ok(StepOutcome::Throw(JValue::Obj(self.err_cce(msg))));
                     }
                 }
                 Flow::Next(0)
@@ -910,9 +919,8 @@ impl Vm {
             }
             Insn::NewInstance(d, type_idx) => {
                 let class_id = self.ensure_class_by_type(f.dex, *type_idx)?;
-                let fields = self.classes[class_id as usize].field_offsets.len();
-                f.regs[*d as usize] =
-                    JValue::Obj(self.arena.alloc(class_id, vec![JValue::Null; fields], None));
+                // JVM default values: primitives 0/false, references null.
+                f.regs[*d as usize] = JValue::Obj(self.alloc_instance(class_id)?);
                 Flow::Next(0)
             }
             Insn::NewArray(d, size_reg, type_idx) => {
@@ -1623,7 +1631,12 @@ fn binop(vm: &mut Vm, op: Binop, a: JValue, b: JValue) -> Result<JValue, u32> {
         (Binop::Rem, JValue::Double(x), JValue::Double(y)) => Ok(JValue::Double(x % y)),
         _ => {
             if log::log_enabled!(log::Level::Debug) {
-                log::debug!("DBG bad binop {op:?} {a:?} {b:?}");
+                let at = vm
+                    .frames
+                    .last()
+                    .map(|f| vm.method_desc_str(f.class, f.slot))
+                    .unwrap_or_default();
+                log::debug!("DBG bad binop {op:?} {a:?} {b:?} at {at}");
             }
             Err(vm.err_arithmetic("bad binop operands"))
         }

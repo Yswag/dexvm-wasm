@@ -15,6 +15,24 @@ fn alloc_big(vm: &mut Vm, value: BigInt) -> R {
     alloc(vm, "Ljava/math/BigInteger;", Native::BigInt(value))
 }
 
+fn bigint_const(vm: &mut Vm, value: i64) -> JValue {
+    alloc(vm, "Ljava/math/BigInteger;", Native::BigInt(BigInt::from(value)))
+        .unwrap_or(JValue::Null)
+}
+
+pub(crate) fn lazy_bigint_zero(vm: &mut Vm) -> JValue {
+    bigint_const(vm, 0)
+}
+pub(crate) fn lazy_bigint_one(vm: &mut Vm) -> JValue {
+    bigint_const(vm, 1)
+}
+pub(crate) fn lazy_bigint_two(vm: &mut Vm) -> JValue {
+    bigint_const(vm, 2)
+}
+pub(crate) fn lazy_bigint_ten(vm: &mut Vm) -> JValue {
+    bigint_const(vm, 10)
+}
+
 fn set_this(vm: &mut Vm, this: JValue, value: BigInt) -> R {
     let JValue::Obj(id) = this else {
         return Err(npe(vm));
@@ -62,6 +80,24 @@ fn biginteger_multiply(vm: &mut Vm, args: &[JValue]) -> R {
     let a = big_of(vm, args[0]).ok_or_else(|| npe(vm))?;
     let b = big_of(vm, args[1]).ok_or_else(|| npe(vm))?;
     alloc_big(vm, a * b)
+}
+
+fn biginteger_and(vm: &mut Vm, args: &[JValue]) -> R {
+    let a = big_of(vm, args[0]).ok_or_else(|| npe(vm))?;
+    let b = big_of(vm, args[1]).ok_or_else(|| npe(vm))?;
+    alloc_big(vm, a & b)
+}
+
+fn biginteger_or(vm: &mut Vm, args: &[JValue]) -> R {
+    let a = big_of(vm, args[0]).ok_or_else(|| npe(vm))?;
+    let b = big_of(vm, args[1]).ok_or_else(|| npe(vm))?;
+    alloc_big(vm, a | b)
+}
+
+fn biginteger_xor(vm: &mut Vm, args: &[JValue]) -> R {
+    let a = big_of(vm, args[0]).ok_or_else(|| npe(vm))?;
+    let b = big_of(vm, args[1]).ok_or_else(|| npe(vm))?;
+    alloc_big(vm, a ^ b)
 }
 fn biginteger_divide(vm: &mut Vm, args: &[JValue]) -> R {
     let a = big_of(vm, args[0]).ok_or_else(|| npe(vm))?;
@@ -286,6 +322,27 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(Ljava/math/BigInteger;)Ljava/math/BigInteger;",
         true,
         biginteger_multiply
+    ),
+    ne!(
+        "Ljava/math/BigInteger;",
+        "and",
+        "(Ljava/math/BigInteger;)Ljava/math/BigInteger;",
+        true,
+        biginteger_and
+    ),
+    ne!(
+        "Ljava/math/BigInteger;",
+        "or",
+        "(Ljava/math/BigInteger;)Ljava/math/BigInteger;",
+        true,
+        biginteger_or
+    ),
+    ne!(
+        "Ljava/math/BigInteger;",
+        "xor",
+        "(Ljava/math/BigInteger;)Ljava/math/BigInteger;",
+        true,
+        biginteger_xor
     ),
     ne!(
         "Ljava/math/BigInteger;",

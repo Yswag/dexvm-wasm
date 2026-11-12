@@ -705,7 +705,12 @@ pub(crate) fn new_str(vm: &mut Vm, s: &str) -> JValue {
 
 pub(crate) fn alloc(vm: &mut Vm, desc: &str, native: Native) -> Result<JValue, NatErr> {
     let class = vm.ensure_class_by_desc(desc).map_err(nat_fatal)?;
-    Ok(JValue::Obj(vm.arena.alloc(class, Vec::new(), Some(native))))
+    // Objects allocated by host shims still need the class's declared
+    // instance fields (e.g. Kotlin's Ref$IntRef.element); `iget` on a
+    // missing slot yields null, not the type default.
+    let id = vm.alloc_instance(class).map_err(nat_fatal)?;
+    vm.arena.objects[id as usize].native = Some(native);
+    Ok(JValue::Obj(id))
 }
 
 pub(crate) fn boxed(vm: &mut Vm, desc: &str, native: Native) -> Result<JValue, NatErr> {

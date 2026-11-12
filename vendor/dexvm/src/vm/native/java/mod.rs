@@ -17,6 +17,9 @@ pub(crate) use self::io::*;
 pub(crate) use self::nio::*;
 pub(crate) use civil::components as civil_components;
 pub(crate) use math::lazy_rounding_mode;
+pub(crate) use math::{
+    lazy_bigint_one, lazy_bigint_ten, lazy_bigint_two, lazy_bigint_zero,
+};
 pub(crate) use lang::*;
 pub(crate) use r#time::{
     lazy_chrono_unit_days, lazy_chrono_unit_hours, lazy_chrono_unit_millis,
