@@ -834,6 +834,19 @@ fn match_result_get_groups(vm: &mut Vm, args: &[JValue]) -> R {
     )
 }
 
+/// `MatchResult.getRange()` — the whole match's code-unit range.
+fn match_result_get_range(vm: &mut Vm, args: &[JValue]) -> R {
+    let (start, end) = match payload(vm, args[0]) {
+        Some(Native::Matcher(ms)) => ms.last.unwrap_or((0, 0)),
+        _ => (0, 0),
+    };
+    alloc(
+        vm,
+        "Lkotlin/ranges/IntRange;",
+        Native::IntRange(start as i32, end.saturating_sub(1) as i32),
+    )
+}
+
 fn match_groups_size(vm: &mut Vm, args: &[JValue]) -> R {
     let Some(Native::List(items)) = payload(vm, args[0]) else {
         return Err(npe(vm));
@@ -1950,6 +1963,8 @@ pub(crate) const KOTLIN_TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/text/MatcherMatchResult;", "getValue", "()Ljava/lang/String;", true, match_result_get_value),
     ne!("Lkotlin/text/MatchResult;", "getGroups", "()Lkotlin/text/MatchGroupCollection;", true, match_result_get_groups),
     ne!("Lkotlin/text/MatcherMatchResult;", "getGroups", "()Lkotlin/text/MatchGroupCollection;", true, match_result_get_groups),
+    ne!("Lkotlin/text/MatchResult;", "getRange", "()Lkotlin/ranges/IntRange;", true, match_result_get_range),
+    ne!("Lkotlin/text/MatcherMatchResult;", "getRange", "()Lkotlin/ranges/IntRange;", true, match_result_get_range),
     ne!("Lkotlin/text/MatchGroupCollection;", "size", "()I", true, match_groups_size),
     ne!("Lkotlin/text/MatchGroupCollection;", "get", "(I)Lkotlin/text/MatchGroup;", true, match_groups_get),
     ne!("Lkotlin/text/MatchGroupCollection;", "get", "(I)Ljava/lang/Object;", true, match_groups_get),

@@ -44,7 +44,7 @@ pub(super) fn collections_remove_all(vm: &mut Vm, args: &[JValue]) -> R {
                 vec![value],
             )
             .map_err(nat_fatal)?;
-        if result.as_int() != 0 {
+        if bool_of(vm, result) {
             removed = true;
         } else {
             kept.push(value);

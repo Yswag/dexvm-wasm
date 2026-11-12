@@ -1283,7 +1283,18 @@ impl Vm {
                         }
                         return Ok(StepOutcome::Throw(JValue::Obj(self.err_npe())));
                     }
-                    Some(r.as_obj())
+                    match r {
+                        JValue::Obj(o) => Some(o),
+                        _ => {
+                            log::warn!(
+                                "invoke receiver is not an object: {}::{} (in {}) recv={r:?}",
+                                self.class_desc_str(f.class),
+                                self.str_of(mref.name),
+                                self.str_of(self.classes[f.class as usize].methods[f.slot as usize].name)
+                            );
+                            return Ok(StepOutcome::Throw(JValue::Obj(self.err_npe())));
+                        }
+                    }
                 };
                 let target = self.resolve_target(*kind, &mref, receiver, f.class)?;
                 let tcls = match &target {
@@ -1618,3 +1629,4 @@ fn binop(vm: &mut Vm, op: Binop, a: JValue, b: JValue) -> Result<JValue, u32> {
         }
     }
 }
+

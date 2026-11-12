@@ -63,9 +63,19 @@ pub(crate) fn coll_elems(vm: &mut Vm, v: JValue) -> Result<Vec<JValue>, NatErr> 
                 }
                 Ok(out)
             }
-            Some(Native::CharRange(first, last)) => Ok((*first..=*last)
-                .map(|c| JValue::Int(c as u16 as i32))
-                .collect()),
+            Some(Native::CharRange(first, last)) => {
+                // A CharRange used as a Collection<Char> holds boxed
+                // Characters (generic erasure), not raw ints.
+                let mut out = Vec::new();
+                for c in *first..=*last {
+                    out.push(alloc(
+                        vm,
+                        "Ljava/lang/Character;",
+                        Native::CharBox(c as u16),
+                    )?);
+                }
+                Ok(out)
+            }
             Some(Native::LongRange(first, last)) => {
                 Ok((*first..=*last).map(JValue::Long).collect())
             }

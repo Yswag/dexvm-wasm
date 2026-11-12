@@ -124,7 +124,9 @@ VM/bridge fixes from this sweep:
 ### MIXED/NSFW zh sweep (2026-11-12)
 
 Same harness over the 35 `CONTENT_WARNING_MIXED` + 39 `CONTENT_WARNING_NSFW`
-zh extensions: **32 of 74 pass** the full flow. Notable passes:
+zh extensions: **34 of 74 pass** the full flow (site flakiness moves one or
+two either way; every remaining failure is a site/credentials issue or a
+missing bundled library, not a VM trap). Notable passes:
 
 | Source | Result |
 |---|---|
@@ -150,9 +152,8 @@ Failure buckets:
 * VM gaps still open: Kotlin reflection beyond `KFunction` (property access,
   `Class.getClassifier`), continuation casts (`Pixiv`, 嬉皮漫畫),
   `okio`/`Class.getClassifier`, `SupportLibReflectionUtil` (HDoujin), the
-  bundled `ca.mpreg.imagedecoder.ImageDecoder` (ToonLook), and three sources
-  that trap the wasm instance (Kagane, 漫?漫画, zero…) — needs a panic message
-  from the host before they can be diagnosed.
+  bundled `ca.mpreg.imagedecoder.ImageDecoder` (ToonLook), and login-gated
+  sites (漫画人, PICACG, 177漫画). No source traps the wasm instance any more.
 * `NHentai.website` and one more reach the reader but fail
   `pageListParse` (`NumberFormatException: ""`).
 
@@ -180,6 +181,14 @@ Later shims: RSA (`java.security.spec.X509EncodedKeySpec`,
 `ByteString` companion/digests (`md5`, `sha1`), `LocalDateTime.now`,
 FormBody `writeTo` form-encoding, and `KFunction`/receiver on
 `FunctionReferenceImpl`.
+
+Trap fixes (all three former hard traps): `removeAll { }` read the boxed
+Boolean result as an int (now `bool_of`); `CharRange` materialized elements
+as raw ints in generic collections (now boxed `Character`, so R8's
+`getClass()` null-check works); a virtual invoke with a non-object receiver
+now throws a catchable NPE and logs the method instead of panicking.
+`MatchResult.getRange()` was added. `JValue::as_*` panics now report the
+call site via `#[track_caller]`.
 
 ### Inverse gap scan (2026-11-12)
 

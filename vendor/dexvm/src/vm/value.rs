@@ -45,26 +45,38 @@ impl JValue {
         }
     }
 
+    #[track_caller]
     pub fn as_int(&self) -> i32 {
         match self {
             JValue::Int(v) => *v,
             JValue::Null => 0,
-            _ => panic!("expected int, got {self:?}"),
+            _ => {
+                let loc = std::panic::Location::caller();
+                panic!("expected int, got {self:?} at {}:{}", loc.file(), loc.line())
+            }
         }
     }
 
+    #[track_caller]
     pub fn as_long(&self) -> i64 {
         match self {
             JValue::Long(v) => *v,
-            _ => panic!("expected long, got {self:?}"),
+            _ => {
+                let loc = std::panic::Location::caller();
+                panic!("expected long, got {self:?} at {}:{}", loc.file(), loc.line())
+            }
         }
     }
 
+    #[track_caller]
     pub fn as_obj(&self) -> u32 {
         match self {
             JValue::Obj(o) => *o,
             JValue::Null => panic!("null object"),
-            _ => panic!("expected object, got {self:?}"),
+            _ => {
+                let loc = std::panic::Location::caller();
+                panic!("expected object, got {self:?} at {}:{}", loc.file(), loc.line())
+            }
         }
     }
 
