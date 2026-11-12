@@ -19,8 +19,26 @@ fn byte_string_alloc(vm: &mut Vm, bytes: Vec<u8>) -> R {
     )
 }
 
+fn byte_string_digest(
+    vm: &mut Vm,
+    args: &[JValue],
+    digest: fn(&[u8]) -> Vec<u8>,
+) -> R {
+    let bytes = byte_string_bytes(vm, args).ok_or_else(|| npe(vm))?;
+    byte_string_alloc(vm, digest(&bytes))
+}
+
+fn byte_string_md5(vm: &mut Vm, args: &[JValue]) -> R {
+    byte_string_digest(vm, args, |bytes| md5::Md5::digest(bytes).to_vec())
+}
+
+fn byte_string_sha1(vm: &mut Vm, args: &[JValue]) -> R {
+    byte_string_digest(vm, args, |bytes| sha1::Sha1::digest(bytes).to_vec())
+}
+
 fn byte_string_decode_base64(vm: &mut Vm, args: &[JValue]) -> R {
-    let s = jstr(vm, args[0])?;
+    // Companion method: args[0] is the receiver, args[1] the string.
+    let s = jstr(vm, args[1])?;
     match BASE64_STD.decode(s.trim()) {
         Ok(bytes) => byte_string_alloc(vm, bytes),
         Err(_) => Ok(JValue::Null),
@@ -28,7 +46,8 @@ fn byte_string_decode_base64(vm: &mut Vm, args: &[JValue]) -> R {
 }
 
 fn byte_string_encode_utf8(vm: &mut Vm, args: &[JValue]) -> R {
-    let s = jstr(vm, args[0])?;
+    // Companion method: args[0] is the receiver, args[1] the string.
+    let s = jstr(vm, args[1])?;
     byte_string_alloc(vm, s.into_bytes())
 }
 
@@ -396,6 +415,26 @@ pub(crate) fn okio_buffer_get(vm: &mut Vm, args: &[JValue]) -> R {
     }
 }
 
+pub(crate) fn lazy_byte_string_companion(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lokio/ByteString$Companion;", Native::Opaque).unwrap_or(JValue::Null)
+}
+
+/// `okio.Buffer()` — the no-arg constructor leaves the object without a
+/// payload, so writeTo/read paths would NPE; install an empty buffer.
+fn okio_buffer_init(vm: &mut Vm, args: &[JValue]) -> R {
+    let JValue::Obj(id) = args[0] else {
+        return Err(npe(vm));
+    };
+    let Some(object) = vm.arena.objects.get_mut(id as usize) else {
+        return Err(npe(vm));
+    };
+    object.native = Some(Native::OkioBuf {
+        bytes: Vec::new(),
+        pos: 0,
+    });
+    Ok(JValue::Null)
+}
+
 fn okio_buffer_size(vm: &mut Vm, args: &[JValue]) -> R {
     match payload(vm, args[0]) {
         Some(Native::OkioBuf { bytes, pos }) => Ok(JValue::Long((bytes.len() - pos) as i64)),
@@ -541,6 +580,10 @@ pub(crate) const OKIO_TABLE: &[NativeEntry] = &[
         true,
         byte_string_hex
     ),
+    ne!("Lokio/ByteString;", "md5", "()Lokio/ByteString;", true, byte_string_md5),
+    ne!("Lokio/ByteString;", "sha1", "()Lokio/ByteString;", true, byte_string_sha1),
+    ne!("Lokio/ByteString;", "sha256", "()Lokio/ByteString;", true, byte_string_sha256),
+    ne!("Lokio/ByteString;", "sha512", "()Lokio/ByteString;", true, byte_string_sha512),
     ne!(
         "Lokio/ByteString;",
         "toByteArray",
@@ -790,6 +833,13 @@ pub(crate) const OKIO_TABLE: &[NativeEntry] = &[
     ne!("Lokio/Buffer;", "get", "(J)B", true, okio_buffer_get),
     ne!(
         "Lokio/Buffer;",
+        "<init>",
+        "()V",
+        true,
+        okio_buffer_init
+    ),
+    ne!(
+        "Lokio/Buffer;",
         "readByteArray",
         "(J)[B",
         true,
@@ -876,3 +926,5 @@ mod tests {
         std::fs::remove_dir(root).unwrap();
     }
 }
+
+

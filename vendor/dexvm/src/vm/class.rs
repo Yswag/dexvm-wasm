@@ -586,7 +586,17 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         0
     ),
     #[cfg(feature = "okhttp")]
-    shim!("Lokio/ByteString;", Some("Ljava/lang/Object;"), &[], 0),
+    shim!(
+        "Lokio/ByteString;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0,
+        [sdef!(
+            "Companion",
+            "Lokio/ByteString$Companion;",
+            ShimValue::Lazy(native::lazy_byte_string_companion)
+        )]
+    ),
     #[cfg(feature = "okhttp")]
     shim!("Lokio/ByteStreams;", Some("Ljava/lang/Object;"), &[], 0),
     #[cfg(feature = "okhttp")]
@@ -2388,28 +2398,30 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     shim!(
         "Lkotlin/jvm/internal/FunctionReferenceImpl;",
         Some("Ljava/lang/Object;"),
-        &[],
-        0
+        &["Lkotlin/jvm/functions/Function1;", "Lkotlin/reflect/KFunction;"],
+        0,
+        [],
+        fields = [("receiver", "Ljava/lang/Object;")]
     ),
     #[cfg(feature = "kotlin")]
     shim!(
         "Lkotlin/jvm/internal/MutablePropertyReference1Impl;",
         Some("Ljava/lang/Object;"),
-        &[],
+        &["Lkotlin/reflect/KProperty;"],
         0
     ),
     #[cfg(feature = "kotlin")]
     shim!(
         "Lkotlin/jvm/internal/PropertyReference0Impl;",
         Some("Ljava/lang/Object;"),
-        &[],
+        &["Lkotlin/reflect/KProperty;"],
         0
     ),
     #[cfg(feature = "kotlin")]
     shim!(
         "Lkotlin/jvm/internal/PropertyReference1Impl;",
         Some("Ljava/lang/Object;"),
-        &[],
+        &["Lkotlin/reflect/KProperty;"],
         0
     ),
     #[cfg(feature = "kotlin")]
@@ -2620,9 +2632,16 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     ),
     #[cfg(feature = "kotlin")]
     shim!(
-        "Lkotlin/reflect/KProperty;",
+        "Lkotlin/reflect/KClassifier;",
         None,
         &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    #[cfg(feature = "kotlin")]
+    shim!(
+        "Lkotlin/reflect/KProperty;",
+        None,
+        &["Lkotlin/reflect/KCallable;"],
         ACC_INTERFACE | ACC_ABSTRACT
     ),
     #[cfg(feature = "kotlin")]
@@ -3875,6 +3894,54 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
             sdef!("YEAR", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_year)),
             sdef!("EPOCH_DAY", "Ljava/time/temporal/ChronoField;", ShimValue::Lazy(native::lazy_chrono_field_epoch_day)),
         ]
+    ),
+    shim!(
+        "Ljava/security/Key;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Ljava/security/PublicKey;",
+        None,
+        &["Ljava/security/Key;"],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Ljava/security/spec/KeySpec;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Ljava/security/spec/EncodedKeySpec;",
+        Some("Ljava/lang/Object;"),
+        &["Ljava/security/spec/KeySpec;"],
+        ACC_PUBLIC | ACC_ABSTRACT
+    ),
+    shim!(
+        "Ljava/security/spec/X509EncodedKeySpec;",
+        Some("Ljava/security/spec/EncodedKeySpec;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Ljava/security/spec/AlgorithmParameterSpec;",
+        None,
+        &[],
+        ACC_INTERFACE | ACC_ABSTRACT
+    ),
+    shim!(
+        "Ljava/security/KeyFactory;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Ljavax/crypto/Cipher;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
     ),
     shim!(
         "Ljava/time/ZoneId;",

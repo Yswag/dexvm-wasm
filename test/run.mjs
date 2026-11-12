@@ -171,7 +171,9 @@ async function newVm() {
 
 async function openApk(vm, apkPath) {
   const t = performance.now();
-  const opened = vm.call('open', { apkBase64: enc(fs.readFileSync(apkPath)) });
+  const req = { apkBase64: enc(fs.readFileSync(apkPath)) };
+  if (process.env.DEXVM_OPEN_LOG) req.logLevel = Number(process.env.DEXVM_OPEN_LOG);
+  const opened = vm.call('open', req);
   return { ...opened, ms: ms(t), path: apkPath };
 }
 

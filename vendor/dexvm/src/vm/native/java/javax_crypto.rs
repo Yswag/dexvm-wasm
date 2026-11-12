@@ -40,6 +40,7 @@ pub(crate) fn cipher_get_instance(vm: &mut Vm, args: &[JValue]) -> R {
             | "AES/ECB/PKCS5PADDING"
             | "AES/ECB/PKCS7PADDING"
             | "AES/ECB/NOPADDING"
+            | "RSA/ECB/PKCS1PADDING"
     ) {
         return Err(iae(
             vm,
@@ -56,6 +57,8 @@ pub(crate) fn cipher_get_instance(vm: &mut Vm, args: &[JValue]) -> R {
             iv: Vec::new(),
             tag_bits: 0,
             aad: Vec::new(),
+            rsa_modulus: Vec::new(),
+            rsa_exponent: Vec::new(),
         },
     )
 }
@@ -123,6 +126,26 @@ pub(crate) fn cipher_init(vm: &mut Vm, args: &[JValue]) -> R {
 
 fn cipher_init_key(vm: &mut Vm, args: &[JValue]) -> R {
     let mode = int_of(vm, args[1]);
+    if let Some(Native::RsaPublicKey { modulus, exponent }) = payload(vm, args[2]) {
+        let (modulus, exponent) = (modulus.clone(), exponent.clone());
+        let Some(Native::CipherState {
+            transformation,
+            mode: stored_mode,
+            rsa_modulus,
+            rsa_exponent,
+            ..
+        }) = payload_mut(vm, args[0])
+        else {
+            return Err(npe(vm));
+        };
+        if !transformation.starts_with("RSA") {
+            return Err(iae(vm, "key type does not match Cipher transformation"));
+        }
+        *stored_mode = mode as u8;
+        *rsa_modulus = modulus;
+        *rsa_exponent = exponent;
+        return Ok(JValue::Null);
+    }
     let key = match payload(vm, args[2]) {
         Some(Native::Key(key)) => key.clone(),
         _ => return Err(npe(vm)),
@@ -251,7 +274,7 @@ pub(crate) fn cipher_do_final(vm: &mut Vm, args: &[JValue]) -> R {
     let off = int_of(vm, args[2]).max(0) as usize;
     let len = int_of(vm, args[3]).max(0) as usize;
     let end = off.saturating_add(len).min(input.len());
-    let (transformation, mode, key, iv, _tag_bits, aad) = match payload(vm, args[0]) {
+    let (transformation, mode, key, iv, _tag_bits, aad, rsa_modulus, rsa_exponent) = match payload(vm, args[0]) {
         Some(Native::CipherState {
             transformation,
             mode,
@@ -259,6 +282,8 @@ pub(crate) fn cipher_do_final(vm: &mut Vm, args: &[JValue]) -> R {
             iv,
             tag_bits,
             aad,
+            rsa_modulus,
+            rsa_exponent,
         }) => (
             transformation.clone(),
             *mode,
@@ -266,11 +291,22 @@ pub(crate) fn cipher_do_final(vm: &mut Vm, args: &[JValue]) -> R {
             iv.clone(),
             *tag_bits,
             aad.clone(),
+            rsa_modulus.clone(),
+            rsa_exponent.clone(),
         ),
         _ => return Err(npe(vm)),
     };
     if mode == 0 {
         return Err(iae(vm, "Cipher not initialized"));
+    }
+    if transformation.starts_with("RSA") {
+        let out = super::security::rsa::rsa_pkcs1_encrypt(
+            &rsa_modulus,
+            &rsa_exponent,
+            &input[off..end],
+        )
+        .ok_or_else(|| iae(vm, "RSA: input too long"))?;
+        return byte_array(vm, out);
     }
     let out = if transformation == "AES/GCM/NOPADDING" {
         let secret: [u8; 32] = key

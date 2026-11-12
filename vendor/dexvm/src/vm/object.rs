@@ -339,6 +339,9 @@ pub enum Native {
         iv: Vec<u8>,
         tag_bits: usize,
         aad: Vec<u8>,
+        /// RSA public key (big-endian) when the transformation is RSA.
+        rsa_modulus: Vec<u8>,
+        rsa_exponent: Vec<u8>,
     },
     /// javax.crypto.spec.SecretKeySpec key bytes.
     Key(Vec<u8>),
@@ -589,6 +592,15 @@ pub enum Native {
     },
     /// java.net.URI (raw string form, parsed on demand).
     URI(String),
+    /// java.security.spec.X509EncodedKeySpec (DER bytes).
+    X509KeySpec(Vec<u8>),
+    /// java.security.PublicKey for RSA (big-endian modulus/exponent).
+    RsaPublicKey {
+        modulus: Vec<u8>,
+        exponent: Vec<u8>,
+    },
+    /// java.security.KeyFactory (algorithm string only).
+    KeyFactory,
     /// okhttp3.Timeout: configurable timeout values on a call.
     Timeout {
         millis: i64,
@@ -1169,7 +1181,10 @@ impl Native {
             | Native::Timeout { .. }
             | Native::OkioBuf { .. }
             | Native::OkioSink { .. }
-            | Native::Type { .. } => {}
+            | Native::Type { .. }
+            | Native::X509KeySpec(_)
+            | Native::RsaPublicKey { .. }
+            | Native::KeyFactory => {}
         }
     }
 }

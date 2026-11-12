@@ -126,6 +126,19 @@ pub(super) fn kotlin_random_next_int(_vm: &mut Vm, _args: &[JValue]) -> R {
 pub(super) fn kotlin_random_kt_random(vm: &mut Vm, _args: &[JValue]) -> R {
     Ok(opaque_inst(vm, "Lkotlin/random/Random;"))
 }
+pub(super) fn function_reference_init(vm: &mut Vm, args: &[JValue]) -> R {
+    // (arity, receiver, owner, name, signature, flags)
+    let receiver = args.get(2).copied().unwrap_or(JValue::Null);
+    if let JValue::Obj(id) = args[0] {
+        if let Some(object) = vm.arena.objects.get_mut(id as usize) {
+            if let Some(slot) = object.fields.first_mut() {
+                *slot = receiver;
+            }
+        }
+    }
+    Ok(JValue::Null)
+}
+
 pub(super) fn kotlin_reflection_class(_vm: &mut Vm, args: &[JValue]) -> R {
     Ok(args[0])
 }
@@ -249,6 +262,6 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/random/Random$Default;", "nextInt", "(II)I", true, kotlin_random_default_next_int),
     ne!("Lkotlin/jvm/internal/DefaultConstructorMarker;", "<init>", "()V", true, object_noop),
     ne!("Lkotlin/jvm/internal/Lambda;", "<init>", "(I)V", true, object_noop),
-    ne!("Lkotlin/jvm/internal/FunctionReferenceImpl;", "<init>", "(ILjava/lang/Object;Ljava/lang/Class;Ljava/lang/String;Ljava/lang/String;I)V", true, object_noop),
+    ne!("Lkotlin/jvm/internal/FunctionReferenceImpl;", "<init>", "(ILjava/lang/Object;Ljava/lang/Class;Ljava/lang/String;Ljava/lang/String;I)V", true, function_reference_init),
     ne!("Lkotlin/coroutines/intrinsics/IntrinsicsKt;", "getCOROUTINE_SUSPENDED", "()Ljava/lang/Object;", false, coroutines_suspended),
 ];

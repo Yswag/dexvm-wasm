@@ -30,8 +30,38 @@ pub(crate) fn ldt_at_zone(vm: &mut Vm, args: &[JValue]) -> R {
     alloc(vm, "Ljava/time/ZonedDateTime;", Native::EpochMillis(millis))
 }
 
+/// `LocalDateTime.now()` (any overload) — current UTC wall clock.
+pub(crate) fn ldt_now(vm: &mut Vm, _args: &[JValue]) -> R {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    alloc(vm, "Ljava/time/LocalDateTime;", Native::EpochMillis(millis))
+}
+
 /// Native methods for Ljava/time/LocalDateTime;
 pub(crate) const TABLE: &[NativeEntry] = &[
+    ne!(
+        "Ljava/time/LocalDateTime;",
+        "now",
+        "()Ljava/time/LocalDateTime;",
+        false,
+        ldt_now
+    ),
+    ne!(
+        "Ljava/time/LocalDateTime;",
+        "now",
+        "(Ljava/time/ZoneId;)Ljava/time/LocalDateTime;",
+        false,
+        ldt_now
+    ),
+    ne!(
+        "Ljava/time/LocalDateTime;",
+        "now",
+        "(Ljava/time/Clock;)Ljava/time/LocalDateTime;",
+        false,
+        ldt_now
+    ),
     ne!(
         "Ljava/time/LocalDateTime;",
         "parse",

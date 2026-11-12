@@ -2141,12 +2141,44 @@ pub(crate) fn request_body_content_type(vm: &mut Vm, args: &[JValue]) -> R {
     }
 }
 
+fn form_encode_component(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for b in value.as_bytes() {
+        match *b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'*' => {
+                out.push(*b as char)
+            }
+            b' ' => out.push('+'),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
 pub(crate) fn request_body_write_to(vm: &mut Vm, args: &[JValue]) -> R {
     let data = match payload(vm, args[0]) {
         Some(Native::Str(s)) => s.as_bytes().to_vec(),
         Some(Native::RespBody(b)) => b.clone(),
         Some(Native::RequestBody { data, .. }) => data.clone(),
-        _ => return Err(npe(vm)),
+        Some(Native::FormBody(fields)) => fields
+            .iter()
+            .map(|(k, v)| format!("{}={}", form_encode_component(k), form_encode_component(v)))
+            .collect::<Vec<_>>()
+            .join("&")
+            .into_bytes(),
+        Some(other) => {
+            let kind = match other {
+                Native::Opaque => "Opaque",
+                Native::Str(_) => "Str",
+                Native::RespBody(_) => "RespBody",
+                Native::RequestBody { .. } => "RequestBody",
+                Native::FormBody(_) => "FormBody",
+                _ => "other",
+            };
+            log::warn!("RequestBody.writeTo: unsupported payload {kind}");
+            return Err(npe(vm));
+        }
+        None => return Err(npe(vm)),
     };
     match payload_mut(vm, args[1]) {
         Some(Native::OkioSink { bytes, .. }) => bytes.extend_from_slice(&data),

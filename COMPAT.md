@@ -147,13 +147,20 @@ Failure buckets:
 * Dead/blocked hosts: HentaiHand, nHentai.com, Luscious, 漫蛙 (connect fail).
 * Site markup/API changes: Ahri Gallery, Manga Ball, Swarm, 米卡漫画,
   Hanime1 (0 mangas), BaKa/巴卡.
-* VM gaps still open: `X509EncodedKeySpec`/RSA (漫画人), Kotlin reflection
-  (`KFunction`, `MatchGroup` cast), continuation casts (`Pixiv`, 嬉皮漫畫),
-  `okio`/`Class.getClassifier`, `SupportLibReflectionUtil`, and three sources
+* VM gaps still open: Kotlin reflection beyond `KFunction` (property access,
+  `Class.getClassifier`), continuation casts (`Pixiv`, 嬉皮漫畫),
+  `okio`/`Class.getClassifier`, `SupportLibReflectionUtil` (HDoujin), the
+  bundled `ca.mpreg.imagedecoder.ImageDecoder` (ToonLook), and three sources
   that trap the wasm instance (Kagane, 漫?漫画, zero…) — needs a panic message
   from the host before they can be diagnosed.
 * `NHentai.website` and one more reach the reader but fail
   `pageListParse` (`NumberFormatException: ""`).
+
+RSA is now implemented (`X509EncodedKeySpec`, `KeyFactory.generatePublic`,
+`Cipher` `RSA/ECB/PKCS1Padding`). 漫画人 gets through key parsing and the
+encrypted anonymous-user call and stops at the site's own "please log in"
+error, not a VM gap. Kotlin function references now satisfy `KFunction` and
+carry their captured `receiver`, so `::method` callables type-check.
 
 Shims added for this sweep: `Cookie.Companion`, `okhttp3.Protocol`,
 `java.time.temporal.ChronoField` constants, `Locale.CHINESE`,
@@ -167,6 +174,12 @@ jsoup `Element : Node` and `Element.isBlock`, `CompletableDeferred(value)` /
 declared collection class), `SharedPreferences.getAll`,
 `WebView.getWebViewClassLoader`, `Class.getClassifier`, and
 `kotlin.time.Instant` compareTo/minus/toString.
+
+Later shims: RSA (`java.security.spec.X509EncodedKeySpec`,
+`KeyFactory`, `javax.crypto.Cipher` PKCS#1 v1.5), `okio.Buffer()` init,
+`ByteString` companion/digests (`md5`, `sha1`), `LocalDateTime.now`,
+FormBody `writeTo` form-encoding, and `KFunction`/receiver on
+`FunctionReferenceImpl`.
 
 ### Old 1.6 notes (2026-11-09, kept for history)
 
