@@ -8,7 +8,7 @@ Update this table on every release. "Passing" means
 | Date | Release | dexvm | ext-lib (Mihon) | Corpus | Result |
 |---|---|---|---|---|---|
 | 2026-11-08 | v0.1.0 | 0.2.0 + patch | 1.4.x, 1.6.3–1.6.8 | `test/fixtures/` (5 APKs) | 5/5 open + sources; MangaPill 1.4.9 and Comic Fury 1.4.8 complete the full flow including images |
-| 2026-11-12 | unreleased | 0.2.0 + patch | 1.6.1–1.6.11 | `test/fixtures/` (14 APKs in `run.mjs`) | 14/14 open + sources; 4/5 Chinese 1.6 sources complete the full flow with images (`node test/run.mjs 1.6`) |
+| 2026-11-12 | v0.2.0-beta.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + 97 zh sweep | 14/14 open; 1.6 gate 5/11 full flow (dm5, Komiic, manhuagui, kaobeimanhua, CuuTruyen); zh full-flow 45/97; EN spot check 0/12 but MangaDex reaches pages |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
