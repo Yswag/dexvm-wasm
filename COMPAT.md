@@ -200,6 +200,33 @@ real map (`put/get/remove/size/evictAll`); `BigInteger` gained
 `and/or/xor` and `ZERO/ONE/TWO/TEN`. Safe-zh now 9/23 (包子漫画 closed its
 gatekeeper).
 
+### EN spot check (2026-11-12)
+
+Twelve popular EN extensions from the current index, `DEXVM_LANGS=en`,
+`DEXVM_UA=okhttp/4.12.0` (MangaDex rejects browser UAs): **0 full passes**,
+but the failures are mostly site-side:
+
+| Source | Result |
+|---|---|
+| MangaDex 1.6.4 | popular/details/chapters/pages OK; imageUrl is a relative `/data/...` path, rejected as an invalid URL |
+| MangaFire 1.6.38 | NPE in popular after the lock fix |
+| Asura Scans 1.6.72 | site 403 |
+| ComicK Fanmade 1.6.4 | HTTP 522 |
+| Kun Manga / Toonily | NPE in popular |
+| Mangakakalot 1.6.28 | NPE in details |
+| Mangahere 1.6.3 | `StringIndexOutOfBoundsException` in pageListParse |
+| Manganato 1.6.25 | site 403 |
+| MangaPill 1.6.1 | popular returns 0 (site changed) |
+| MangaReader.site 1.6.41 | NPE |
+| Weeb Central 1.6.27 | 403 with a non-browser UA, no chapters with a desktop UA |
+
+Harness changes that came out of this: curl runs with `-g` (bracket URLs like
+MangaDex's `contentRating[]` no longer trip globbing — this also made
+CuuTruyen 1.6 pass) and `DEXVM_LANGS=en` selects languages for `apks` mode.
+
+Shims added for EN: `ZonedDateTime/LocalDateTime/LocalDate.format(formatter)`,
+`java.util.concurrent.locks.ReentrantReadWriteLock` (+Read/WriteLock).
+
 ### Inverse gap scan (2026-11-12)
 
 Instead of copying Suwayomi's `AndroidCompat` class list, the corpus was

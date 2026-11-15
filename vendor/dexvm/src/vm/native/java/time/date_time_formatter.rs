@@ -57,6 +57,13 @@ pub(crate) fn dtf_format(vm: &mut Vm, args: &[JValue]) -> R {
         Some(Native::Date(m)) => *m,
         _ => return Err(npe(vm)),
     };
+    Ok(new_str(vm, &format_pattern(&pattern, millis)))
+}
+
+/// Renders `pattern` for a UTC epoch-millis value. Shared by
+/// `DateTimeFormatter.format` and temporal types that format themselves
+/// (`ZonedDateTime.format`, `LocalDate.format`, ...).
+pub(crate) fn format_pattern(pattern: &str, millis: i64) -> String {
     let (year, month, day, hour, minute, second, _) = super::super::civil::components(millis);
     let mut out = String::new();
     let pb = pattern.as_bytes();
@@ -91,9 +98,8 @@ pub(crate) fn dtf_format(vm: &mut Vm, args: &[JValue]) -> R {
         }
         pi += run;
     }
-    Ok(new_str(vm, &out))
+    out
 }
-
 /// wasm: materializer for the JDK's predefined formatter constants; 1.6
 /// sources read `DateTimeFormatter.ISO_LOCAL_DATE` & co. as static fields.
 fn dtf_pattern(vm: &mut Vm, pattern: &str) -> JValue {
@@ -220,3 +226,4 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         dtf_get_zone
     ),
 ];
+

@@ -228,10 +228,12 @@ matrix (dm5, Komiic, manhuagui and kaobeimanhua currently pass end to end).
 * **Panics trap.** `wasm32-wasip1` has no unwinding, so `catch_unwind` is inert.
   The loader converts a trap into `DexvmError { kind: 'trap' }` and marks the
   instance unusable; recovery requires a fresh instance.
-* **ext-lib 1.6.x is partially supported.** dm5, Komiic, manhuagui and
-  kaobeimanhua pass the full flow; see [`COMPAT.md`](COMPAT.md) for the current
-  matrix. Remaining blockers are source/site-specific (RSA crypto for
-  manhuaren, gatekeeper challenges for baozimanhua).
+* **ext-lib 1.6.x is partially supported.** The full-flow matrix is in
+  [`COMPAT.md`](COMPAT.md): 45 of the 97 current Chinese extensions pass
+  (dm5, Komiic, manhuagui, kaobeimanhua, 包子漫画, Pixiv, …), and a spot check
+  of 12 popular English extensions found no complete pass but several that
+  reach the reader. Remaining failures are predominantly site-side (Cloudflare,
+  logins, dead hosts) or a missing bundled library; no source crashes the VM.
 * **`nsfw` is always `null`.** NSFW flags live in the extension index, not the APK.
 * **Image `Referer`.** Some CDNs reject requests without one, so `fetchImage`
   and `imageRequest` fall back to the source's `baseUrl` when the extension sets

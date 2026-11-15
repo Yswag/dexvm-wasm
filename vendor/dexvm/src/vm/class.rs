@@ -1578,6 +1578,24 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         0
     ),
     shim!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    shim!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock$ReadLock;",
+        Some("Ljava/lang/Object;"),
+        &["Ljava/util/concurrent/locks/Lock;"],
+        0
+    ),
+    shim!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock$WriteLock;",
+        Some("Ljava/lang/Object;"),
+        &["Ljava/util/concurrent/locks/Lock;"],
+        0
+    ),
+    shim!(
         "Ljava/util/concurrent/locks/Condition;",
         None,
         &[],

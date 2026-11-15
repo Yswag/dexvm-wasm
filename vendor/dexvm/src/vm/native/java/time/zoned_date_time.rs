@@ -254,6 +254,25 @@ pub(crate) fn parse_pattern_millis(text: &str, pattern: &str) -> Option<i64> {
     ))
 }
 
+/// `ZonedDateTime.format(formatter)` / `LocalDateTime.format` /
+/// `LocalDate.format` — shares the DateTimeFormatter pattern renderer.
+fn temporal_format(vm: &mut Vm, args: &[JValue]) -> R {
+    let pattern = match payload(vm, args[1]) {
+        Some(Native::DateFormatter { pattern, .. }) => pattern.clone(),
+        _ => return Err(npe(vm)),
+    };
+    let millis = match payload(vm, args[0]) {
+        Some(Native::EpochMillis(m)) => *m,
+        Some(Native::LocalDay(d)) => i64::from(*d) * super::super::civil::DAY_MS,
+        Some(Native::Date(m)) => *m,
+        _ => return Err(npe(vm)),
+    };
+    Ok(new_str(
+        vm,
+        &super::date_time_formatter::format_pattern(&pattern, millis),
+    ))
+}
+
 /// Native methods for Ljava/time/chrono/ChronoZonedDateTime;,
 /// Ljava/time/ZonedDateTime; and Ljava/time/OffsetDateTime; (all share the
 /// same UTC-epoch-millis representation).
@@ -285,6 +304,27 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "()J",
         true,
         zdt_to_epoch_second
+    ),
+    ne!(
+        "Ljava/time/ZonedDateTime;",
+        "format",
+        "(Ljava/time/format/DateTimeFormatter;)Ljava/lang/String;",
+        true,
+        temporal_format
+    ),
+    ne!(
+        "Ljava/time/LocalDateTime;",
+        "format",
+        "(Ljava/time/format/DateTimeFormatter;)Ljava/lang/String;",
+        true,
+        temporal_format
+    ),
+    ne!(
+        "Ljava/time/LocalDate;",
+        "format",
+        "(Ljava/time/format/DateTimeFormatter;)Ljava/lang/String;",
+        true,
+        temporal_format
     ),
     ne!(
         "Ljava/time/ZonedDateTime;",

@@ -87,7 +87,7 @@ function syncHttp(reqJson) {
   const id = `${process.pid}-${httpCount}`;
   const bodyFile = path.join(WORK, `body-${id}.bin`);
   const hdrFile = path.join(WORK, `hdr-${id}.txt`);
-  const args = ['-sS', '--max-time', '60', '-L', '--max-redirs', '5',
+  const args = ['-sS', '-g', '--max-time', '60', '-L', '--max-redirs', '5',
     '-D', hdrFile, '-o', bodyFile, '-w', '%{http_code} %{url_effective}'];
   const method = (req.method || 'GET').toUpperCase();
   if (method !== 'GET') args.push('-X', method);
@@ -444,7 +444,11 @@ async function main() {
   if (mode === 'apks') {
     const dir = path.resolve(process.argv[3] || path.join(WORK, 'apks'));
     const apks = fs.readdirSync(dir).filter((f) => f.endsWith('.apk')).sort();
-    const langs = process.env.DEXVM_ALL_LANGS ? null : ['zh'];
+    const langs = process.env.DEXVM_LANGS
+      ? process.env.DEXVM_LANGS.split(',')
+      : process.env.DEXVM_ALL_LANGS
+        ? null
+        : ['zh'];
     console.log(`scanning ${apks.length} APKs in ${dir} (langs: ${langs ? langs.join(',') : 'all'})\n`);
     summary.apks = await modeFlows(apks, { dir, langs });
   }

@@ -2284,6 +2284,27 @@ mod tests {
         assert_eq!(r, JValue::Int(3));
     }
 
+    /// JVM object fields start at their type defaults: primitives 0, references
+    /// null. `new-instance` used to fill every slot with null, so a primitive
+    /// field read before its first write panicked in arithmetic.
+    #[test]
+    fn new_instances_fill_jvm_field_defaults() {
+        let dex = DexFile::parse(&hello_dex()).expect("parse dex");
+        let mut vm = Vm::new(vec![dex], Box::new(Vec::new())).expect("vm");
+
+        let int_ref = vm
+            .ensure_class_by_desc("Lkotlin/jvm/internal/Ref$IntRef;")
+            .expect("Ref$IntRef");
+        let int_obj = vm.alloc_instance(int_ref).expect("alloc IntRef");
+        assert_eq!(vm.instance_field(int_obj, "element"), Some(JValue::Int(0)));
+
+        let obj_ref = vm
+            .ensure_class_by_desc("Lkotlin/jvm/internal/FunctionReferenceImpl;")
+            .expect("FunctionReferenceImpl");
+        let obj = vm.alloc_instance(obj_ref).expect("alloc FunctionReferenceImpl");
+        assert_eq!(vm.instance_field(obj, "receiver"), Some(JValue::Null));
+    }
+
     // Hand-assembled dex containing just class LHello; whose only method
     // `static int g()` is declared `native` (access_flags 0x100 | 0x8) with
     // no code item.

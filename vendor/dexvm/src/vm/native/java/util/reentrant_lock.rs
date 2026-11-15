@@ -32,6 +32,43 @@ pub(crate) fn reentrant_lock_new_condition(vm: &mut Vm, _args: &[JValue]) -> R {
     alloc(vm, "Ljava/util/concurrent/locks/Condition;", Native::Opaque)
 }
 
+/// `ReentrantReadWriteLock`: the VM is single-threaded, so the read/write
+/// halves are the same uncontended lock object.
+pub(crate) fn rwlock_init(vm: &mut Vm, args: &[JValue]) -> R {
+    let JValue::Obj(id) = args[0] else {
+        return Err(npe(vm));
+    };
+    let Some(object) = vm.arena.objects.get_mut(id as usize) else {
+        return Err(npe(vm));
+    };
+    object.native = Some(Native::ReentrantLock { locked: false });
+    Ok(JValue::Null)
+}
+
+pub(crate) fn rwlock_read_lock(vm: &mut Vm, _args: &[JValue]) -> R {
+    alloc(
+        vm,
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock$ReadLock;",
+        Native::ReentrantLock { locked: false },
+    )
+}
+
+pub(crate) fn rwlock_write_lock(vm: &mut Vm, _args: &[JValue]) -> R {
+    alloc(
+        vm,
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock$WriteLock;",
+        Native::ReentrantLock { locked: false },
+    )
+}
+
+pub(crate) fn reentrant_lock_try_lock(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Int(1))
+}
+
+pub(crate) fn reentrant_lock_is_held(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Int(0))
+}
+
 pub(crate) fn condition_await_nanos(_vm: &mut Vm, _args: &[JValue]) -> R {
     Ok(JValue::Long(0))
 }
@@ -84,6 +121,104 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "()Ljava/util/concurrent/locks/Condition;",
         true,
         reentrant_lock_new_condition
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantLock;",
+        "tryLock",
+        "()Z",
+        true,
+        reentrant_lock_try_lock
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock;",
+        "<init>",
+        "()V",
+        true,
+        rwlock_init
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock;",
+        "<init>",
+        "(Z)V",
+        true,
+        rwlock_init
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock;",
+        "readLock",
+        "()Ljava/util/concurrent/locks/ReentrantReadWriteLock$ReadLock;",
+        true,
+        rwlock_read_lock
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock;",
+        "writeLock",
+        "()Ljava/util/concurrent/locks/ReentrantReadWriteLock$WriteLock;",
+        true,
+        rwlock_write_lock
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock;",
+        "isWriteLocked",
+        "()Z",
+        true,
+        reentrant_lock_is_held
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock;",
+        "isWriteLockedByCurrentThread",
+        "()Z",
+        true,
+        reentrant_lock_is_held
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock;",
+        "getReadHoldCount",
+        "()I",
+        true,
+        reentrant_lock_is_held
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock$ReadLock;",
+        "lock",
+        "()V",
+        true,
+        reentrant_lock_lock
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock$ReadLock;",
+        "unlock",
+        "()V",
+        true,
+        reentrant_lock_unlock
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock$ReadLock;",
+        "tryLock",
+        "()Z",
+        true,
+        reentrant_lock_try_lock
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock$WriteLock;",
+        "lock",
+        "()V",
+        true,
+        reentrant_lock_lock
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock$WriteLock;",
+        "unlock",
+        "()V",
+        true,
+        reentrant_lock_unlock
+    ),
+    ne!(
+        "Ljava/util/concurrent/locks/ReentrantReadWriteLock$WriteLock;",
+        "tryLock",
+        "()Z",
+        true,
+        reentrant_lock_try_lock
     ),
 ];
 
