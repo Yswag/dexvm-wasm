@@ -9,7 +9,7 @@ Update this table on every release. "Passing" means
 |---|---|---|---|---|---|
 | 2026-11-08 | v0.1.0 | 0.2.0 + patch | 1.4.x, 1.6.3–1.6.8 | `test/fixtures/` (5 APKs) | 5/5 open + sources; MangaPill 1.4.9 and Comic Fury 1.4.8 complete the full flow including images |
 | 2026-11-12 | v0.2.0-beta.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + 97 zh sweep | 14/14 open; 1.6 gate 5/11 full flow (dm5, Komiic, manhuagui, kaobeimanhua, CuuTruyen); zh full-flow 45/97; EN spot check 0/12 but MangaDex reaches pages |
-| 2026-11-25 | unreleased | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + EN 1.6 follow-up | 14/14 open; 1.6 gate **6/11** full flow (+Weeb Central); EN follow-up adds **MangaDex**, **MangaFire**, and **Mangahere** end-to-end |
+| 2026-11-25 | unreleased | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + EN 1.6 follow-up | 14/14 open; 1.6 gate **6/11** full flow (+Weeb Central); EN follow-up adds **MangaDex**, **MangaFire**, **Mangahere**, **Kun Manga Online**, and **Mangakakalot** end-to-end |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
@@ -268,6 +268,19 @@ Five VM/bridge fixes targeting the remaining 1.6.x EN and cross-source gaps:
 * **`CloseableKt.closeFinally` / `ArrayDeque.<init>` / `runnable_post`**:
   switched remaining `args[i].is_null()` checks to `is_null_ref()` for DEX
   `const/4 0` null references.
+* **ext-lib 1.6 `SManga.memo` / `SChapter.memo` round-tripping**: `Manga` and
+  `Chapter` now carry optional JSON-encoded `memo` across `keiyoushi.rs` and
+  `dexvm-bridge/src/engine.rs` (`popular`/`chapters` -> `details`/`chapters`/
+  `pages`), and `SManga.getMemo()` / `SChapter.getMemo()` lazily return an
+  empty non-null `JsonObject` by default. Unblocks **Kun Manga Online 1.6.63**
+  end-to-end (12 mangas / 2,160 chapters / 9 pages / 115 KB WebP), removes
+  `Asura Scans 1.6.72`'s `details` NPE (now reaches the site's 403), and
+  unblocks **Mangakakalot 1.6.30** through `popular`/`details`/`chapters`.
+* **`SequencesKt.mapIndexed` boxed index**: `Function2<Int, T, R>` erases to
+  `invoke(Object, Object)Object` with a boxed `java.lang.Integer`, not
+  `(ILjava/lang/Object;)Ljava/lang/Object;`. Fixes **Mangakakalot 1.6.30**
+  `pages` — now passes end-to-end (24 mangas / 3,877 chapters / 96 pages /
+  4.6 KB WebP).
 
 Unit test `vm::tests::ext16_shims_null_ref_regex_escape_and_jsoup_attr_regex`
 locks in these behaviors without requiring an external APK.

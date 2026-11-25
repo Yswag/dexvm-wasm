@@ -256,7 +256,8 @@ fn jsonval_to_string(v: &JsonVal) -> String {
     }
 }
 
-fn jsonval_to_json(v: &JsonVal) -> String {
+// wasm: exposed for Keiyoushi SManga/SChapter memo round-tripping.
+pub(crate) fn jsonval_to_json(v: &JsonVal) -> String {
     fn quoted(value: &str) -> String {
         let mut out = String::with_capacity(value.len() + 2);
         out.push('"');

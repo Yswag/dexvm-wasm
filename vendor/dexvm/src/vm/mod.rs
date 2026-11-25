@@ -2589,5 +2589,21 @@ mod tests {
             )
             .unwrap();
         assert_eq!(vm.str_of_jvalue(sub).as_deref(), Some("eval(123)"));
+
+        // 8. SManga.getMemo() returns a non-null empty JsonObject by default.
+        let sm_cid = vm
+            .ensure_class_by_desc("Leu/kanade/tachiyomi/source/model/SManga;")
+            .unwrap();
+        let sm = JValue::Obj(vm.arena.alloc(
+            sm_cid,
+            Vec::new(),
+            Some(native::keiyoushi::empty_smanga()),
+        ));
+        let memo = vm
+            .invoke_virtual(sm, "getMemo", "()Lkotlinx/serialization/json/JsonObject;")
+            .unwrap();
+        assert!(!memo.is_null_ref());
+        let is_empty = vm.invoke_virtual(memo, "isEmpty", "()Z").unwrap();
+        assert_eq!(is_empty.as_int(), 1);
     }
 }

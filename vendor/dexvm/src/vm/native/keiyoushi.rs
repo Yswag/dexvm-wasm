@@ -771,11 +771,24 @@ pub(crate) fn smanga_set_initialized(_vm: &mut Vm, _args: &[JValue]) -> R {
     Ok(JValue::Null)
 }
 
+// wasm: ext-lib 1.6 SManga.memo is a non-null JsonObject (empty by default).
 pub(crate) fn smanga_get_memo(vm: &mut Vm, args: &[JValue]) -> R {
-    match payload(vm, args[0]) {
-        Some(Native::SManga { memo, .. }) => Ok(*memo),
-        _ => Err(npe(vm)),
+    let cur = match payload(vm, args[0]) {
+        Some(Native::SManga { memo, .. }) => *memo,
+        _ => return Err(npe(vm)),
+    };
+    if cur.is_null_ref() {
+        let empty = alloc(
+            vm,
+            "Lkotlinx/serialization/json/JsonObject;",
+            Native::Json(crate::vm::object::JsonVal::Object(Vec::new())),
+        )?;
+        if let Some(Native::SManga { memo, .. }) = payload_mut(vm, args[0]) {
+            *memo = empty;
+        }
+        return Ok(empty);
     }
+    Ok(cur)
 }
 
 pub(crate) fn smanga_set_memo(vm: &mut Vm, args: &[JValue]) -> R {
@@ -876,11 +889,24 @@ pub(crate) fn schapter_set_chapter_number(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Null)
 }
 
+// wasm: ext-lib 1.6 SChapter.memo is a non-null JsonObject (empty by default).
 pub(crate) fn schapter_get_memo(vm: &mut Vm, args: &[JValue]) -> R {
-    match payload(vm, args[0]) {
-        Some(Native::SChapter { memo, .. }) => Ok(*memo),
-        _ => Err(npe(vm)),
+    let cur = match payload(vm, args[0]) {
+        Some(Native::SChapter { memo, .. }) => *memo,
+        _ => return Err(npe(vm)),
+    };
+    if cur.is_null_ref() {
+        let empty = alloc(
+            vm,
+            "Lkotlinx/serialization/json/JsonObject;",
+            Native::Json(crate::vm::object::JsonVal::Object(Vec::new())),
+        )?;
+        if let Some(Native::SChapter { memo, .. }) = payload_mut(vm, args[0]) {
+            *memo = empty;
+        }
+        return Ok(empty);
     }
+    Ok(cur)
 }
 
 pub(crate) fn schapter_set_memo(vm: &mut Vm, args: &[JValue]) -> R {

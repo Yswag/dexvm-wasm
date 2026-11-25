@@ -47,17 +47,19 @@ fn sequence_filter(vm: &mut Vm, args: &[JValue]) -> R {
     }
     alloc(vm, "Lkotlin/sequences/Sequence;", Native::List(out))
 }
+// wasm: Kotlin Function2<Int, T, R> erases to invoke(Object, Object)Object with boxed Integer.
 fn sequence_map_indexed(vm: &mut Vm, args: &[JValue]) -> R {
     let values = coll_elems(vm, args[0])?;
     let f = args[1];
     let mut out = Vec::with_capacity(values.len());
     for (i, value) in values.into_iter().enumerate() {
+        let idx_box = boxed(vm, "Ljava/lang/Integer;", Native::IntBox(i as i32))?;
         out.push(inv_virt(
             vm,
             f,
             "invoke",
-            "(ILjava/lang/Object;)Ljava/lang/Object;",
-            &[JValue::Int(i as i32), value],
+            "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+            &[idx_box, value],
         )?);
     }
     alloc(vm, "Lkotlin/sequences/Sequence;", Native::List(out))

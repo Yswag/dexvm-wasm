@@ -141,8 +141,10 @@ Other `fd_*` return `EBADF`; `path_*` return `ENOSYS`.
 type Source = { id: string; name: string; lang: string; baseUrl: string;
                 supportsLatest: boolean; nsfw: null };
 type Manga = { title: string; author: string; artist: string; description: string;
-               genre: string; status: number; thumbnailUrl: string; url: string };
-type Chapter = { name: string; url: string; dateUpload: number; scanlator: string };
+               genre: string; status: number; thumbnailUrl: string; url: string;
+               memo?: string };
+type Chapter = { name: string; url: string; dateUpload: number; scanlator: string;
+                 memo?: string };
 type PageRef = { index: number; name: string; url: string; imageUrl: string };
 type MangaPage = { mangas: Manga[]; hasNextPage: boolean };
 type FilterDef = { kind: 'plain'|'header'|'separator'|'text'|'select'|'tristate'|'group';
@@ -222,8 +224,8 @@ first three mangas (site data).
 The ext-lib 1.6 builds currently published by the keiyoushi repo are
 gated by `node test/run.mjs 1.6`; see `COMPAT.md` for the per-source
 matrix (dm5, Komiic, manhuagui, kaobeimanhua, CuuTruyen, and Weeb Central
-currently pass end to end, along with MangaDex, MangaFire, and Mangahere in
-the EN check).
+currently pass end to end, along with MangaDex, MangaFire, Mangahere,
+Kun Manga Online, and Mangakakalot in the EN check).
 
 ## Limitations
 

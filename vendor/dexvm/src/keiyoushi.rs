@@ -56,6 +56,8 @@ pub struct Manga {
     pub status: i32,
     pub thumbnail_url: String,
     pub url: String,
+    // wasm: ext-lib 1.6 SManga.memo (JSON-encoded JsonObject).
+    pub memo: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -64,6 +66,8 @@ pub struct Chapter {
     pub url: String,
     pub date_upload: i64,
     pub scanlator: String,
+    // wasm: ext-lib 1.6 SChapter.memo (JSON-encoded JsonObject).
+    pub memo: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -548,13 +552,7 @@ impl Keiyoushi {
     }
 
     pub fn pages(&mut self, src: &Source, chapter: &Chapter) -> Result<Vec<PageRef>, JvmError> {
-        let (url, name) = (chapter.url.clone(), chapter.name.clone());
-        let cid = self.ctx.vm().ensure_class_by_desc(SCHAPTER)?;
-        let c = JValue::Obj(self.ctx.vm().arena.alloc(
-            cid,
-            Vec::new(),
-            Some(empty_chapter(url, name)),
-        ));
+        let c = self.alloc_chapter(chapter)?;
         if let Some(list) = self.try_fetch_observable(
             src,
             "fetchPageList",
@@ -688,6 +686,42 @@ impl Keiyoushi {
         })
     }
 
+    // wasm: serialize SManga/SChapter memo JsonObject to a JSON string.
+    fn read_memo(&mut self, v: JValue) -> Option<String> {
+        if v.is_null_ref() {
+            return None;
+        }
+        match self.ctx.vm().payload_of(v) {
+            Some(Native::Json(ref jv @ crate::vm::object::JsonVal::Object(ref entries)))
+                if !entries.is_empty() =>
+            {
+                Some(crate::vm::native::serialization::jsonval_to_json(jv))
+            }
+            _ => None,
+        }
+    }
+
+    // wasm: parse a JSON-encoded memo string back into a kotlinx JsonObject.
+    fn alloc_memo(&mut self, memo: Option<&str>) -> Result<JValue, JvmError> {
+        let Some(raw) = memo.filter(|s| !s.is_empty()) else {
+            return Ok(JValue::Null);
+        };
+        let Ok(jv @ crate::vm::object::JsonVal::Object(_)) =
+            crate::vm::native::serialization::parse_json(raw)
+        else {
+            return Ok(JValue::Null);
+        };
+        let cid = self
+            .ctx
+            .vm()
+            .ensure_class_by_desc("Lkotlinx/serialization/json/JsonObject;")?;
+        Ok(JValue::Obj(self.ctx.vm().arena.alloc(
+            cid,
+            Vec::new(),
+            Some(Native::Json(jv)),
+        )))
+    }
+
     fn read_manga(&mut self, v: JValue) -> Result<Option<Manga>, JvmError> {
         match self.ctx.vm().payload_of(v) {
             Some(Native::SManga {
@@ -699,17 +733,22 @@ impl Keiyoushi {
                 status,
                 thumbnail_url,
                 url,
+                memo,
                 ..
-            }) => Ok(Some(Manga {
-                title,
-                author: author.unwrap_or_default(),
-                artist: artist.unwrap_or_default(),
-                description: description.unwrap_or_default(),
-                genre: genre.unwrap_or_default(),
-                status,
-                thumbnail_url,
-                url,
-            })),
+            }) => {
+                let memo = self.read_memo(memo);
+                Ok(Some(Manga {
+                    title,
+                    author: author.unwrap_or_default(),
+                    artist: artist.unwrap_or_default(),
+                    description: description.unwrap_or_default(),
+                    genre: genre.unwrap_or_default(),
+                    status,
+                    thumbnail_url,
+                    url,
+                    memo,
+                }))
+            }
             _ => Ok(None),
         }
     }
@@ -747,14 +786,17 @@ impl Keiyoushi {
                 url,
                 date_upload,
                 scanlator,
+                memo,
                 ..
             }) = self.ctx.vm().payload_of(c)
             {
+                let memo = self.read_memo(memo);
                 out.push(Chapter {
                     name,
                     url,
                     date_upload,
                     scanlator,
+                    memo,
                 });
             }
         }
@@ -931,6 +973,7 @@ impl Keiyoushi {
     }
 
     fn alloc_manga(&mut self, m: &Manga) -> Result<JValue, JvmError> {
+        let memo = self.alloc_memo(m.memo.as_deref())?;
         let cid = self.ctx.vm().ensure_class_by_desc(SMANGA)?;
         let payload = Native::SManga {
             title: m.title.clone(),
@@ -942,7 +985,26 @@ impl Keiyoushi {
             thumbnail_url: m.thumbnail_url.clone(),
             url: m.url.clone(),
             update_strategy: JValue::Null,
-            memo: JValue::Null,
+            memo,
+        };
+        Ok(JValue::Obj(self.ctx.vm().arena.alloc(
+            cid,
+            Vec::new(),
+            Some(payload),
+        )))
+    }
+
+    // wasm: allocate SChapter preserving date_upload, scanlator, and ext-lib 1.6 memo.
+    fn alloc_chapter(&mut self, c: &Chapter) -> Result<JValue, JvmError> {
+        let memo = self.alloc_memo(c.memo.as_deref())?;
+        let cid = self.ctx.vm().ensure_class_by_desc(SCHAPTER)?;
+        let payload = Native::SChapter {
+            name: c.name.clone(),
+            url: c.url.clone(),
+            date_upload: c.date_upload,
+            scanlator: c.scanlator.clone(),
+            chapter_number: 0.0,
+            memo,
         };
         Ok(JValue::Obj(self.ctx.vm().arena.alloc(
             cid,
@@ -1042,13 +1104,7 @@ impl Keiyoushi {
         src: &Source,
         chapter: &Chapter,
     ) -> Result<Vec<PageRef>, JvmError> {
-        let (url, name) = (chapter.url.clone(), chapter.name.clone());
-        let cid = self.ctx.vm().ensure_class_by_desc(SCHAPTER)?;
-        let c = JValue::Obj(self.ctx.vm().arena.alloc(
-            cid,
-            Vec::new(),
-            Some(empty_chapter(url, name)),
-        ));
+        let c = self.alloc_chapter(chapter)?;
         let cont = self.suspend_cont()?;
         let out = self.ctx.invoke_on(
             src.inst,
@@ -1216,6 +1272,7 @@ impl Keiyoushi {
     }
 }
 
+#[allow(dead_code)]
 fn empty_chapter(url: String, name: String) -> Native {
     Native::SChapter {
         name,

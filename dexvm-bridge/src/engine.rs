@@ -197,8 +197,16 @@ fn str_of_opt(k: &mut Keiyoushi, v: JValue) -> Option<String> {
     k.ctx().vm().str_of_jvalue(v)
 }
 
+fn memo_from(v: &Value) -> Option<String> {
+    match v.get("memo") {
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(obj @ Value::Object(_)) => Some(obj.to_string()),
+        _ => None,
+    }
+}
+
 fn manga_json(m: &Manga) -> Value {
-    json!({
+    let mut v = json!({
         "title": m.title,
         "author": m.author,
         "artist": m.artist,
@@ -207,7 +215,11 @@ fn manga_json(m: &Manga) -> Value {
         "status": m.status,
         "thumbnailUrl": m.thumbnail_url,
         "url": m.url,
-    })
+    });
+    if let Some(memo) = &m.memo {
+        v["memo"] = json!(memo);
+    }
+    v
 }
 
 fn manga_from(v: &Value) -> Manga {
@@ -220,16 +232,21 @@ fn manga_from(v: &Value) -> Manga {
         status: v.get("status").and_then(|x| x.as_i64()).unwrap_or(0) as i32,
         thumbnail_url: s(v, "thumbnailUrl"),
         url: s(v, "url"),
+        memo: memo_from(v),
     }
 }
 
 fn chapter_json(c: &Chapter) -> Value {
-    json!({
+    let mut v = json!({
         "name": c.name,
         "url": c.url,
         "dateUpload": c.date_upload,
         "scanlator": c.scanlator,
-    })
+    });
+    if let Some(memo) = &c.memo {
+        v["memo"] = json!(memo);
+    }
+    v
 }
 
 fn chapter_from(v: &Value) -> Chapter {
@@ -238,6 +255,7 @@ fn chapter_from(v: &Value) -> Chapter {
         url: s(v, "url"),
         date_upload: v.get("dateUpload").and_then(|x| x.as_i64()).unwrap_or(0),
         scanlator: s(v, "scanlator"),
+        memo: memo_from(v),
     }
 }
 
