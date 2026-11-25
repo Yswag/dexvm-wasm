@@ -70,7 +70,7 @@ runtime, the hash is only a one-time supply-chain check.
 
 ```
 scripts/build.sh             # cargo build + wasm-opt -Oz + sha256
-scripts/release.sh v0.2.2    # same, plus dist/SHA256SUMS and BUILDINFO
+scripts/release.sh v0.2.3    # same, plus dist/SHA256SUMS and BUILDINFO
 node test/run.mjs fixtures   # corpus gate
 ```
 
@@ -134,6 +134,7 @@ Other `fd_*` return `EBADF`; `path_*` return `ENOSYS`.
 | `search` | `sourceId`, `query`, `page`, `filters` | `MangaPage` |
 | `details` | `sourceId`, `manga` | `Manga` |
 | `chapters` | `sourceId`, `manga` | `Chapter[]` (upstream order) |
+| `mangaUpdate` | `sourceId`, `manga`, `chapters?`, `fetchDetails?`, `fetchChapters?` | `{ manga: Manga, chapters: Chapter[] }` |
 | `pages` | `sourceId`, `chapter` | `PageRef[]` |
 | `imageUrl` | `sourceId`, `page` | `{ imageUrl }` |
 | `imageRequest` | `sourceId`, `page` | `{ url, method, headers }` |
@@ -173,6 +174,10 @@ JSON number round-trip.
 require), then runs the extension's own interceptor chain, returning the bytes
 untouched and the last response's `content-type`.
 
+`mangaUpdate` fetches both details and chapters in a single `getMangaUpdate`
+call on ext-lib 1.6 sources (falling back to `details` + `chapters` on legacy
+sources). `fetchDetails` and `fetchChapters` both default to `true`.
+
 `open`'s `prefs` uses the same shape as `exportPrefs` and is seeded before the
 extension reads it: `{ "source_3973269831131863421": { "website_password": "…" } }`.
 
@@ -211,7 +216,10 @@ serializers), `okio.Buffer$UnsafeCursor` + `ForwardingSource` draining,
 `kotlinx.coroutines.sync.Mutex` overloads, jsoup `[attr~=regex]`/`:contains`,
 `HttpSource.getHeaders()`/`headersBuilder()`/`configureHeaders()` +
 `UserAgentInterceptor` + `AppInfo.INSTANCE`,
-timed `Object.wait`/`Condition.await`/`CountDownLatch.await` → WASI `poll_oneoff` +
+timed `Object.wait`/`Condition.await`/`CountDownLatch.await`/`DelayKt.delay` → WASI `poll_oneoff`,
+non-blocking `GlobalScope.launch` (detached fire-and-forget jobs dropped),
+`StringsKt.lineSequence`/`Sequence.iterator`, `MatchResult.getDestructured`/`Destructured.component1..10`,
+`BooleanSerializer` `java.lang.Boolean` boxing, `JsonNull.INSTANCE`,
 `kotlin.time.DurationUnit` enum variants,
 and `java.time`/`DecimalFormat`/`Map.computeIfAbsent` shims.
 

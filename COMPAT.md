@@ -12,6 +12,7 @@ Update this table on every release. "Passing" means
 | 2026-11-25 | v0.2.0 | 0.2.0 + patch | 1.6.1–1.6.72 | 24 fixtures (`test/fixtures/`, 21 ext-lib 1.6) | 24/24 open; 1.6 gate **16/21** full flow (+Weeb Central, MangaDex, MangaFire, Mangahere, Kun Manga Online, Mangakakalot, **MANGA Plus by SHUEISHA**, **Shonen Jump+**, **Webtoons.com**, **MangaBuddy/MangaK**, **Rawkuma**); all 5 remaining failures are site-side (403/522/UA), zero VM errors |
 | 2026-11-25 | v0.2.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; 1.6 gate **17/22** full flow (+**manhuagui v1.6.2** via `HttpSource.getHeaders()` → `headersBuilder()` / `configureHeaders()`, `AppInfo.INSTANCE`, and optional `open.defaultUserAgent`); 6/6 offline header unit tests pass |
 | 2026-11-25 | v0.2.2 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; 1.6 gate **17/22** full flow; optional host `sleep(ms)` in `dexvm-host.js`, timed wait shims (`Object.wait`, `Condition.awaitNanos`/`await`, `CountDownLatch.await`) routed via WASI `poll_oneoff`, `DurationUnit` fix; 11/11 unit tests pass |
+| 2026-11-26 | v0.2.3 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; 1.6 gate **17/22** full flow; single-request 1.6 `details`/`chapters` + combined `mangaUpdate` op, non-blocking `GlobalScope.launch` + `DelayKt.delay` → host `sleep`, `StringsKt.lineSequence`/`Sequence.iterator`, `MatchResult.getDestructured`, `BooleanSerializer` boxing, `JsonNull.INSTANCE`; 17/17 unit tests pass |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
@@ -386,6 +387,31 @@ locks in these behaviors without requiring an external APK.
   `ABSTIME` + `clock_time_get` consistency, and `manhuagui` v1.6.2 15-call
   rate limiting (10 req / 10 s). `test/run.mjs` now supplies an `Atomics.wait`
   `sleep` implementation in Node.
+
+### ext-lib 1.6 dedup, `mangaUpdate`, coroutines & shims (2026-11-26, v0.2.3)
+
+1. **No duplicate HTTP requests in `details`/`chapters` + combined `mangaUpdate` op**:
+   sources implementing `getMangaUpdate`/`fetchMangaUpdate` now go directly to
+   the coroutine path (1 HTTP request instead of 3); legacy sources skip the
+   `HttpSource` native `fetch*` stub unless overridden in DEX bytecode (1 HTTP
+   request instead of 2). Added `mangaUpdate` op returning `{ manga, chapters }`
+   in a single `getMangaUpdate` call.
+2. **Non-blocking `GlobalScope.launch` + `DelayKt.delay` → host `sleep`**:
+   detached `GlobalScope.launch` fire-and-forget jobs are dropped (returning an
+   opaque `Job` without blocking the main op, eliminating Manhuagui's ~0.9 s
+   background ajax overhead), while structured `coroutineScope { launch {} }`
+   still runs inline; `DelayKt.delay` now delegates positive durations to
+   `std::thread::sleep` (→ WASI `poll_oneoff` → `createDexvm({ sleep })`).
+3. **`StringsKt.lineSequence(CharSequence)` + `Sequence.iterator()` + `JsonNull.INSTANCE`**:
+   unblocks **WaManga v1.6.3** `popular` (24 mangas).
+4. **`MatchResult.getDestructured()` + `MatchResult$Destructured.component1..10`**:
+   unblocks **Desu v1.6.37** `popular` (24 mangas).
+5. **`kotlinx.serialization` `BooleanSerializer` boxing**:
+   `run_serializer` and `primitive_serializer_deserialize` now box booleans as
+   `java.lang.Boolean` (`Native::BoolBox`) instead of `java.lang.Integer`, fixing
+   `ClassCastException` on nullable `Boolean?` DTO fields (e.g. **XCOMIC v1.6.11**).
+* **Offline repro tests**: `test/v023.test.mjs` covers all 5 fixes (6/6 passing;
+  17/17 total unit tests).
 
 ### Inverse gap scan (2026-11-12)
 

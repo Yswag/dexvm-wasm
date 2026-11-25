@@ -26,7 +26,7 @@ jobs:
         run: scripts/build.sh
 
       - name: Smoke test and unit tests
-        run: node test/smoke.mjs && node test/run.mjs fixtures && node --test test/headers.test.mjs test/sleep.test.mjs
+        run: node test/smoke.mjs && node test/run.mjs fixtures && node --test test/headers.test.mjs test/sleep.test.mjs test/v023.test.mjs
 
       - name: Upload wasm (build artifact)
         uses: actions/upload-artifact@v4

@@ -2064,12 +2064,18 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &[],
         ACC_ABSTRACT
     ),
+    // wasm: JsonNull is a Kotlin object; expose INSTANCE.
     #[cfg(feature = "tachiyomi")]
     shim!(
         "Lkotlinx/serialization/json/JsonNull;",
         Some("Lkotlinx/serialization/json/JsonPrimitive;"),
         &[],
-        0
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Lkotlinx/serialization/json/JsonNull;",
+            ShimValue::Lazy(native::lazy_json_null_instance)
+        )]
     ),
     #[cfg(feature = "tachiyomi")]
     shim!(

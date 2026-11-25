@@ -325,7 +325,28 @@ fn sequence_generate(vm: &mut Vm, args: &[JValue]) -> R {
     seq_alloc(vm, out)
 }
 
+// wasm: `Sequence.iterator()` — iterate over materialized sequence items (used by `for (x in seq)`).
+fn sequence_iterator(vm: &mut Vm, args: &[JValue]) -> R {
+    let items = coll_elems(vm, args[0])?;
+    let list = list_alloc(vm, items)?;
+    alloc(
+        vm,
+        "Ljava/util/Iterator;",
+        Native::Iter(IterKind::List {
+            list: list.as_obj(),
+            idx: 0,
+        }),
+    )
+}
+
 pub(crate) const TABLE: &[NativeEntry] = &[
+    ne!(
+        "Lkotlin/sequences/Sequence;",
+        "iterator",
+        "()Ljava/util/Iterator;",
+        true,
+        sequence_iterator
+    ),
     ne!(
         "Lkotlin/sequences/SequencesKt;",
         "map",

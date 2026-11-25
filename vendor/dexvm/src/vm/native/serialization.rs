@@ -221,6 +221,16 @@ impl<'a> Parser<'a> {
 // element tree
 // ---------------------------------------------------------------------------
 
+// wasm: JsonNull.INSTANCE singleton (Kotlin object).
+pub(crate) fn lazy_json_null_instance(vm: &mut Vm) -> JValue {
+    alloc(
+        vm,
+        "Lkotlinx/serialization/json/JsonNull;",
+        Native::Json(JsonVal::Null),
+    )
+    .unwrap_or(JValue::Null)
+}
+
 fn json_node_class(v: &JsonVal) -> &'static str {
     match v {
         JsonVal::Object(_) => "Lkotlinx/serialization/json/JsonObject;",
@@ -897,9 +907,26 @@ fn run_serializer(vm: &mut Vm, serializer: JValue, element: JValue, module: Opti
                 Some(Native::Json(value)) => value.clone(),
                 _ => JsonVal::Null,
             };
-            // wasm: PrimitiveSerializer returns Object; box primitives so callers can invoke Number.*Value().
+            // wasm: PrimitiveSerializer returns Object; box primitives (Boolean as java.lang.Boolean).
+            let is_bool = match serializer {
+                JValue::Obj(id) => vm
+                    .str_of(vm.classes[vm.arena.objects[id as usize].class as usize].descriptor)
+                    .contains("BooleanSerializer"),
+                _ => false,
+            };
             return match kind {
                 PrimitiveSerializerKind::String => Ok(new_str(vm, &jsonval_to_string(&value))),
+                PrimitiveSerializerKind::Int if is_bool => alloc(
+                    vm,
+                    "Ljava/lang/Boolean;",
+                    Native::BoolBox(match value {
+                        JsonVal::Bool(b) => b,
+                        JsonVal::Int(v) => v != 0,
+                        JsonVal::Double(v) => v != 0.0,
+                        JsonVal::Str(v) => v.eq_ignore_ascii_case("true"),
+                        _ => false,
+                    }),
+                ),
                 PrimitiveSerializerKind::Int => alloc(
                     vm,
                     "Ljava/lang/Integer;",
@@ -2611,9 +2638,26 @@ fn primitive_serializer_deserialize(vm: &mut Vm, args: &[JValue]) -> R {
             };
         }
     };
-    // wasm: PrimitiveSerializer.deserialize returns Object; box primitives so callers can invoke Number.*Value().
+    // wasm: PrimitiveSerializer.deserialize returns Object; box Boolean as java.lang.Boolean.
+    let is_bool = match args[0] {
+        JValue::Obj(id) => vm
+            .str_of(vm.classes[vm.arena.objects[id as usize].class as usize].descriptor)
+            .contains("BooleanSerializer"),
+        _ => false,
+    };
     match kind {
         PrimitiveSerializerKind::String => Ok(new_str(vm, &jsonval_to_string(&value))),
+        PrimitiveSerializerKind::Int if is_bool => alloc(
+            vm,
+            "Ljava/lang/Boolean;",
+            Native::BoolBox(match value {
+                JsonVal::Bool(b) => b,
+                JsonVal::Int(v) => v != 0,
+                JsonVal::Double(v) => v != 0.0,
+                JsonVal::Str(v) => v.eq_ignore_ascii_case("true"),
+                _ => false,
+            }),
+        ),
         PrimitiveSerializerKind::Int => alloc(
             vm,
             "Ljava/lang/Integer;",

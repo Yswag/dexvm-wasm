@@ -598,6 +598,12 @@ fn do_search(
 }
 
 fn do_details(e: &mut Engine, src: &Source, m: &Manga) -> Result<Manga, String> {
+    if e.k.has_manga_update(src) {
+        return e
+            .k
+            .manga_update_details(src, m)
+            .map_err(|er| e.k.describe_error(&er));
+    }
     match e.k.manga_details(src, m) {
         Ok(v) => Ok(v),
         Err(first) => match e.k.manga_update_details(src, m) {
@@ -608,6 +614,12 @@ fn do_details(e: &mut Engine, src: &Source, m: &Manga) -> Result<Manga, String> 
 }
 
 fn do_chapters(e: &mut Engine, src: &Source, m: &Manga) -> Result<Vec<Chapter>, String> {
+    if e.k.has_manga_update(src) {
+        return e
+            .k
+            .manga_update_chapters(src, m)
+            .map_err(|er| e.k.describe_error(&er));
+    }
     match e.k.chapters(src, m) {
         Ok(v) => Ok(v),
         Err(first) => match e.k.manga_update_chapters(src, m) {
@@ -655,6 +667,7 @@ pub fn dispatch(op: &str, req: &Value) -> R<Value> {
                 "search" => with_engine(h, |e| op_search(e, req)),
                 "details" => with_engine(h, |e| op_details(e, req)),
                 "chapters" => with_engine(h, |e| op_chapters(e, req)),
+                "mangaUpdate" => with_engine(h, |e| op_manga_update(e, req)),
                 "pages" => with_engine(h, |e| op_pages(e, req)),
                 "imageUrl" => with_engine(h, |e| op_image_url(e, req)),
                 "imageRequest" => with_engine(h, |e| op_image_request(e, req)),
@@ -870,6 +883,66 @@ fn op_chapters(e: &mut Engine, req: &Value) -> R<Value> {
         Ok(c) => Ok(Value::Array(c.iter().map(chapter_json).collect())),
         Err(msg) => Err(fail(e, "java", msg)),
     }
+}
+
+fn op_manga_update(e: &mut Engine, req: &Value) -> R<Value> {
+    let id = id_arg(req);
+    let manga = manga_from(req.get("manga").unwrap_or(&Value::Null));
+    let existing_chapters: Vec<Chapter> = req
+        .get("chapters")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().map(chapter_from).collect())
+        .unwrap_or_default();
+    let fetch_details = req
+        .get("fetchDetails")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let fetch_chapters = req
+        .get("fetchChapters")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    if !fetch_details && !fetch_chapters {
+        return Err(err(
+            "bad_args",
+            "mangaUpdate requires fetchDetails or fetchChapters to be true",
+        ));
+    }
+    let src = source_by_id(e, id)?;
+    if e.k.has_manga_update(&src) {
+        return match e.k.manga_update(
+            &src,
+            &manga,
+            &existing_chapters,
+            fetch_details,
+            fetch_chapters,
+        ) {
+            Ok((m, chs)) => Ok(json!({
+                "manga": manga_json(&m),
+                "chapters": chs.iter().map(chapter_json).collect::<Vec<_>>(),
+            })),
+            Err(er) => Err(java_err(&mut e.k, er)),
+        };
+    }
+    let updated_manga = if fetch_details {
+        match do_details(e, &src, &manga) {
+            Ok(m) => m,
+            Err(msg) => return Err(fail(e, "java", msg)),
+        }
+    } else {
+        manga
+    };
+    let updated_chapters = if fetch_chapters {
+        match do_chapters(e, &src, &updated_manga) {
+            Ok(c) => c,
+            Err(msg) => return Err(fail(e, "java", msg)),
+        }
+    } else {
+        existing_chapters
+    };
+    Ok(json!({
+        "manga": manga_json(&updated_manga),
+        "chapters": updated_chapters.iter().map(chapter_json).collect::<Vec<_>>(),
+    }))
 }
 
 fn op_pages(e: &mut Engine, req: &Value) -> R<Value> {

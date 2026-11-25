@@ -789,9 +789,64 @@ fn match_result_get_value(vm: &mut Vm, args: &[JValue]) -> R {
 }
 
 fn match_result_destructured_to_list(vm: &mut Vm, args: &[JValue]) -> R {
-    let value = match_result_get_value(vm, args)?;
-    list_alloc(vm, vec![value])
+    // wasm: Kotlin Destructured.toList() returns capturing groups (index 1..),
+    // falling back to [whole match] when no capturing groups are present.
+    let items = match payload(vm, args[0]) {
+        Some(Native::Matcher(ms)) if ms.groups.len() > 1 => {
+            let texts: Vec<String> = ms.groups[1..]
+                .iter()
+                .map(|g| match g {
+                    Some((start, end)) => ms.text.get(*start..*end).unwrap_or("").to_string(),
+                    None => String::new(),
+                })
+                .collect();
+            texts.into_iter().map(|t| new_str(vm, &t)).collect()
+        }
+        _ => vec![match_result_get_value(vm, args)?],
+    };
+    list_alloc(vm, items)
 }
+
+// wasm: MatchResult.getDestructured() -> MatchResult$Destructured wrapping the same matcher state.
+fn match_result_get_destructured(vm: &mut Vm, args: &[JValue]) -> R {
+    let state = match payload(vm, args[0]) {
+        Some(Native::Matcher(ms)) => MatcherState {
+            pattern: ms.pattern.clone(),
+            text: ms.text.clone(),
+            pos: ms.pos,
+            last: ms.last,
+            groups: ms.groups.clone(),
+        },
+        _ => return Err(npe(vm)),
+    };
+    alloc(
+        vm,
+        "Lkotlin/text/MatchResult$Destructured;",
+        Native::Matcher(state),
+    )
+}
+
+fn match_result_destructured_component(vm: &mut Vm, args: &[JValue], idx: usize) -> R {
+    let text = match payload(vm, args[0]) {
+        Some(Native::Matcher(ms)) => match ms.groups.get(idx).copied().flatten() {
+            Some((start, end)) => ms.text.get(start..end).unwrap_or("").to_string(),
+            None => String::new(),
+        },
+        _ => return Err(npe(vm)),
+    };
+    Ok(new_str(vm, &text))
+}
+
+fn match_result_destructured_c1(vm: &mut Vm, args: &[JValue]) -> R { match_result_destructured_component(vm, args, 1) }
+fn match_result_destructured_c2(vm: &mut Vm, args: &[JValue]) -> R { match_result_destructured_component(vm, args, 2) }
+fn match_result_destructured_c3(vm: &mut Vm, args: &[JValue]) -> R { match_result_destructured_component(vm, args, 3) }
+fn match_result_destructured_c4(vm: &mut Vm, args: &[JValue]) -> R { match_result_destructured_component(vm, args, 4) }
+fn match_result_destructured_c5(vm: &mut Vm, args: &[JValue]) -> R { match_result_destructured_component(vm, args, 5) }
+fn match_result_destructured_c6(vm: &mut Vm, args: &[JValue]) -> R { match_result_destructured_component(vm, args, 6) }
+fn match_result_destructured_c7(vm: &mut Vm, args: &[JValue]) -> R { match_result_destructured_component(vm, args, 7) }
+fn match_result_destructured_c8(vm: &mut Vm, args: &[JValue]) -> R { match_result_destructured_component(vm, args, 8) }
+fn match_result_destructured_c9(vm: &mut Vm, args: &[JValue]) -> R { match_result_destructured_component(vm, args, 9) }
+fn match_result_destructured_c10(vm: &mut Vm, args: &[JValue]) -> R { match_result_destructured_component(vm, args, 10) }
 
 /// `MatchResult.getGroupValues` — the whole match followed by every
 /// capturing group (unmatched optional groups become empty strings).
@@ -1333,6 +1388,27 @@ fn stringskt_lines(vm: &mut Vm, args: &[JValue]) -> R {
         lines.push(new_str(vm, &s[start..]));
     }
     list_alloc(vm, lines)
+}
+
+// wasm: `StringsKt.lineSequence(CharSequence)` -> Sequence<String> splitting on \r\n, \n, or \r.
+fn stringskt_line_sequence(vm: &mut Vm, args: &[JValue]) -> R {
+    let s = charseq_of(vm, args[0])?;
+    let bytes = s.as_bytes();
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\n' || bytes[i] == b'\r' {
+            lines.push(new_str(vm, &s[start..i]));
+            if bytes[i] == b'\r' && bytes.get(i + 1) == Some(&b'\n') {
+                i += 1;
+            }
+            start = i + 1;
+        }
+        i += 1;
+    }
+    lines.push(new_str(vm, &s[start..]));
+    alloc(vm, "Lkotlin/sequences/Sequence;", Native::List(lines))
 }
 
 fn stringskt_chunked(vm: &mut Vm, args: &[JValue]) -> R {
@@ -2002,7 +2078,21 @@ pub(crate) const KOTLIN_TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/text/CharsKt;", "titlecase", "(CLjava/util/Locale;)Ljava/lang/String;", false, charskt_titlecase),
     ne!("Lkotlin/text/MatchResult;", "getValue", "()Ljava/lang/String;", true, match_result_get_value),
     ne!("Lkotlin/text/MatchResult;", "getGroupValues", "()Ljava/util/List;", true, match_result_get_group_values),
+    // wasm: MatchResult.getDestructured() + Destructured.component1..10 + StringsKt.lineSequence
+    ne!("Lkotlin/text/MatchResult;", "getDestructured", "()Lkotlin/text/MatchResult$Destructured;", true, match_result_get_destructured),
+    ne!("Lkotlin/text/MatcherMatchResult;", "getDestructured", "()Lkotlin/text/MatchResult$Destructured;", true, match_result_get_destructured),
     ne!("Lkotlin/text/MatchResult$Destructured;", "toList", "()Ljava/util/List;", true, match_result_destructured_to_list),
+    ne!("Lkotlin/text/MatchResult$Destructured;", "component1", "()Ljava/lang/String;", true, match_result_destructured_c1),
+    ne!("Lkotlin/text/MatchResult$Destructured;", "component2", "()Ljava/lang/String;", true, match_result_destructured_c2),
+    ne!("Lkotlin/text/MatchResult$Destructured;", "component3", "()Ljava/lang/String;", true, match_result_destructured_c3),
+    ne!("Lkotlin/text/MatchResult$Destructured;", "component4", "()Ljava/lang/String;", true, match_result_destructured_c4),
+    ne!("Lkotlin/text/MatchResult$Destructured;", "component5", "()Ljava/lang/String;", true, match_result_destructured_c5),
+    ne!("Lkotlin/text/MatchResult$Destructured;", "component6", "()Ljava/lang/String;", true, match_result_destructured_c6),
+    ne!("Lkotlin/text/MatchResult$Destructured;", "component7", "()Ljava/lang/String;", true, match_result_destructured_c7),
+    ne!("Lkotlin/text/MatchResult$Destructured;", "component8", "()Ljava/lang/String;", true, match_result_destructured_c8),
+    ne!("Lkotlin/text/MatchResult$Destructured;", "component9", "()Ljava/lang/String;", true, match_result_destructured_c9),
+    ne!("Lkotlin/text/MatchResult$Destructured;", "component10", "()Ljava/lang/String;", true, match_result_destructured_c10),
+    ne!("Lkotlin/text/StringsKt;", "lineSequence", "(Ljava/lang/CharSequence;)Lkotlin/sequences/Sequence;", false, stringskt_line_sequence),
     ne!("Lkotlin/text/MatchGroup;", "getValue", "()Ljava/lang/String;", true, match_group_get_value),
     ne!("Lkotlin/text/MatcherMatchResult;", "getValue", "()Ljava/lang/String;", true, match_result_get_value),
     ne!("Lkotlin/text/MatchResult;", "getGroups", "()Lkotlin/text/MatchGroupCollection;", true, match_result_get_groups),

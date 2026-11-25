@@ -497,19 +497,47 @@ impl Keiyoushi {
         Ok(values.into_iter().next())
     }
 
+    // wasm: returns true iff virtual dispatch on `src` resolves to a DEX bytecode
+    // method rather than a host native stub (or missing method).
+    pub fn has_dex_method(&mut self, src: &Source, name: &str, sig: &str) -> bool {
+        use crate::dex::insn::InvokeKind;
+        use crate::vm::{MethodRef, Target};
+        let vm = self.ctx.vm();
+        let mref = MethodRef {
+            name: vm.intern(name),
+            sig: vm.intern(sig),
+            ret: 0,
+            args: Vec::new(),
+            class_desc: 0,
+        };
+        matches!(
+            vm.resolve_target(InvokeKind::Virtual, &mref, Some(src.inst), 0),
+            Ok(target) if !matches!(target, Target::Native(_))
+        )
+    }
+
+    // wasm: true when the source implements ext-lib 1.6 `getMangaUpdate` / `fetchMangaUpdate`.
+    pub fn has_manga_update(&mut self, src: &Source) -> bool {
+        const SIG: &str =
+            "(Leu/kanade/tachiyomi/source/model/SManga;Ljava/util/List;ZZLkotlin/coroutines/Continuation;)Ljava/lang/Object;";
+        self.has_dex_method(src, "getMangaUpdate", SIG)
+            || self.has_dex_method(src, "fetchMangaUpdate", SIG)
+    }
+
     pub fn manga_details(&mut self, src: &Source, manga: &Manga) -> Result<Manga, JvmError> {
         let m = self.alloc_manga(manga)?;
-        // Rx-style sources (e.g. M+) override `fetchMangaDetails` and leave
-        // the request/parse pair as deliberate stubs.
-        if let Some(out) = self.try_fetch_observable(
-            src,
-            "fetchMangaDetails",
-            "(Leu/kanade/tachiyomi/source/model/SManga;)Lrx/Observable;",
-            &[m],
-        )? {
-            return self
-                .read_manga(out)?
-                .ok_or_else(|| JvmError::Resolution("fetchMangaDetails: not a SManga".into()));
+        // wasm: only invoke `fetchMangaDetails` when the extension actually overrides
+        // it in DEX bytecode; otherwise the HttpSource native stub would execute an
+        // HTTP request and fail on stub `mangaDetailsParse`, causing a duplicate request.
+        const FETCH_SIG: &str = "(Leu/kanade/tachiyomi/source/model/SManga;)Lrx/Observable;";
+        if self.has_dex_method(src, "fetchMangaDetails", FETCH_SIG) {
+            if let Some(out) =
+                self.try_fetch_observable(src, "fetchMangaDetails", FETCH_SIG, &[m])?
+            {
+                return self
+                    .read_manga(out)?
+                    .ok_or_else(|| JvmError::Resolution("fetchMangaDetails: not a SManga".into()));
+            }
         }
 
         let req = self.ctx.invoke_on(
@@ -531,13 +559,13 @@ impl Keiyoushi {
 
     pub fn chapters(&mut self, src: &Source, manga: &Manga) -> Result<Vec<Chapter>, JvmError> {
         let m = self.alloc_manga(manga)?;
-        if let Some(list) = self.try_fetch_observable(
-            src,
-            "fetchChapterList",
-            "(Leu/kanade/tachiyomi/source/model/SManga;)Lrx/Observable;",
-            &[m],
-        )? {
-            return self.read_chapter_list(list);
+        const FETCH_SIG: &str = "(Leu/kanade/tachiyomi/source/model/SManga;)Lrx/Observable;";
+        if self.has_dex_method(src, "fetchChapterList", FETCH_SIG) {
+            if let Some(list) =
+                self.try_fetch_observable(src, "fetchChapterList", FETCH_SIG, &[m])?
+            {
+                return self.read_chapter_list(list);
+            }
         }
 
         let req = self.ctx.invoke_on(
@@ -558,13 +586,13 @@ impl Keiyoushi {
 
     pub fn pages(&mut self, src: &Source, chapter: &Chapter) -> Result<Vec<PageRef>, JvmError> {
         let c = self.alloc_chapter(chapter)?;
-        if let Some(list) = self.try_fetch_observable(
-            src,
-            "fetchPageList",
-            "(Leu/kanade/tachiyomi/source/model/SChapter;)Lrx/Observable;",
-            &[c],
-        )? {
-            return self.read_page_list(list);
+        const FETCH_SIG: &str = "(Leu/kanade/tachiyomi/source/model/SChapter;)Lrx/Observable;";
+        if self.has_dex_method(src, "fetchPageList", FETCH_SIG) {
+            if let Some(list) =
+                self.try_fetch_observable(src, "fetchPageList", FETCH_SIG, &[c])?
+            {
+                return self.read_page_list(list);
+            }
         }
 
         let req = self.ctx.invoke_on(
@@ -1217,6 +1245,63 @@ impl Keiyoushi {
         )?;
         self.read_manga(smanga)?
             .ok_or_else(|| JvmError::Resolution("getMangaUpdate: not a SManga".into()))
+    }
+
+    /// `getMangaUpdate(..., true, true)` returning both updated manga and chapters
+    /// in a single coroutine call.
+    // wasm:
+    pub fn manga_update(
+        &mut self,
+        src: &Source,
+        manga: &Manga,
+        chapters: &[Chapter],
+        fetch_details: bool,
+        fetch_chapters: bool,
+    ) -> Result<(Manga, Vec<Chapter>), JvmError> {
+        let m = self.alloc_manga(manga)?;
+        let mut ch_objs = Vec::with_capacity(chapters.len());
+        for c in chapters {
+            ch_objs.push(self.alloc_chapter(c)?);
+        }
+        let cid = self
+            .ctx
+            .vm()
+            .ensure_class_by_desc("Ljava/util/ArrayList;")?;
+        let ch_list = JValue::Obj(self.ctx.vm().arena.alloc(
+            cid,
+            Vec::new(),
+            Some(Native::List(ch_objs)),
+        ));
+        let cont = self.suspend_cont()?;
+        let out = self.ctx.invoke_on(
+            src.inst,
+            "getMangaUpdate",
+            "(Leu/kanade/tachiyomi/source/model/SManga;Ljava/util/List;ZZLkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+            &[
+                m,
+                ch_list,
+                JValue::Int(i32::from(fetch_details)),
+                JValue::Int(i32::from(fetch_chapters)),
+                cont,
+            ],
+        )?;
+        let JValue::Obj(out_id) = out else {
+            return Err(JvmError::Resolution("getMangaUpdate: not an object".into()));
+        };
+        let smanga = self.ctx.invoke_on(
+            out_id,
+            "getManga",
+            "()Leu/kanade/tachiyomi/source/model/SManga;",
+            &[],
+        )?;
+        let updated_manga = self
+            .read_manga(smanga)?
+            .ok_or_else(|| JvmError::Resolution("getMangaUpdate: not a SManga".into()))?;
+        let list = self
+            .ctx
+            .invoke_on(out_id, "getChapters", "()Ljava/util/List;", &[])?;
+        let updated_chapters = self.read_chapter_list(list)?;
+        Ok((updated_manga, updated_chapters))
     }
 
     /// `getMangaUpdate(..., false, true)` read as a chapter list.

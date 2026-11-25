@@ -103,22 +103,41 @@ pub(crate) fn mutex_is_locked(vm: &mut Vm, args: &[JValue]) -> R {
     }
 }
 pub(crate) fn coroutines_launch_default(vm: &mut Vm, args: &[JValue]) -> R {
-    let _ = vm.invoke_virtual_args(
-        args[3],
-        "invoke",
-        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
-        vec![args[0], JValue::Null],
-    );
+    // wasm: detached `GlobalScope.launch` is fire-and-forget background work
+    // (e.g. Manhuagui's delayed ajax pings, KeiSource background filter refresh).
+    // Drop it rather than blocking the main synchronous op; structured scopes
+    // (`coroutineScope { launch { ... } }`) still execute inline.
+    let is_global = match args.first() {
+        Some(JValue::Obj(id)) => vm
+            .arena
+            .objects
+            .get(*id as usize)
+            .map(|o| vm.str_of(vm.classes[o.class as usize].descriptor) == "Lkotlinx/coroutines/GlobalScope;")
+            .unwrap_or(false),
+        _ => false,
+    };
+    if !is_global {
+        let _ = vm.invoke_virtual_args(
+            args[3],
+            "invoke",
+            "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+            vec![args[0], JValue::Null],
+        );
+    }
     alloc(vm, "Lkotlinx/coroutines/Job;", Native::Opaque)
 }
-/// `delay(millis, continuation)`: this VM runs coroutines synchronously, so
-/// there's nothing to actually suspend for — just resume immediately.
 /// wasm: `CoroutineStart` constants.
 pub(crate) fn lazy_coroutine_start(vm: &mut Vm) -> JValue {
     alloc(vm, "Lkotlinx/coroutines/CoroutineStart;", Native::Opaque).unwrap_or(JValue::Null)
 }
 
-pub(crate) fn coroutines_delay(vm: &mut Vm, _args: &[JValue]) -> R {
+/// `delay(millis, continuation)` / `delay-VtjQ1oo(durationMs, continuation)`.
+// wasm: delegate positive delays to std::thread::sleep (-> WASI poll_oneoff -> host sleep).
+pub(crate) fn coroutines_delay(vm: &mut Vm, args: &[JValue]) -> R {
+    let millis = long_of(vm, args[0]);
+    if millis > 0 {
+        std::thread::sleep(std::time::Duration::from_millis(millis as u64));
+    }
     Ok(lazy_unit_instance(vm))
 }
 pub(crate) fn coroutines_supervisor_job_default(vm: &mut Vm, _args: &[JValue]) -> R {
@@ -230,6 +249,7 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/coroutines/TimeoutKt;", "withTimeout-KLykuaI", "(JLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", false, coroutines_with_timeout),
     ne!("Lkotlinx/coroutines/CompletableDeferredKt;", "CompletableDeferred$default", "(Lkotlinx/coroutines/Job;ILjava/lang/Object;)Lkotlinx/coroutines/CompletableDeferred;", false, completable_deferred_default),
     ne!("Lkotlinx/coroutines/CompletableDeferredKt;", "CompletableDeferred", "(Ljava/lang/Object;)Lkotlinx/coroutines/CompletableDeferred;", false, completable_deferred_value),
+    ne!("Lkotlinx/coroutines/BuildersKt;", "launch", "(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;)Lkotlinx/coroutines/Job;", false, coroutines_launch_default),
     ne!("Lkotlinx/coroutines/BuildersKt;", "launch$default", "(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/Job;", false, coroutines_launch_default),
     ne!("Lkotlinx/coroutines/BuildersKt;", "async$default", "(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/CoroutineContext;Lkotlinx/coroutines/CoroutineStart;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/Deferred;", false, coroutines_async_default),
     ne!("Lkotlinx/coroutines/CoroutineScopeKt;", "coroutineScope", "(Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", false, coroutines_scope),
