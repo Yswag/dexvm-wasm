@@ -9,7 +9,7 @@ Update this table on every release. "Passing" means
 |---|---|---|---|---|---|
 | 2026-11-08 | v0.1.0 | 0.2.0 + patch | 1.4.x, 1.6.3–1.6.8 | `test/fixtures/` (5 APKs) | 5/5 open + sources; MangaPill 1.4.9 and Comic Fury 1.4.8 complete the full flow including images |
 | 2026-11-12 | v0.2.0-beta.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + 97 zh sweep | 14/14 open; 1.6 gate 5/11 full flow (dm5, Komiic, manhuagui, kaobeimanhua, CuuTruyen); zh full-flow 45/97; EN spot check 0/12 but MangaDex reaches pages |
-| 2026-11-25 | unreleased | 0.2.0 + patch | 1.6.1–1.6.72 | 24 fixtures (`test/fixtures/`, 21 ext-lib 1.6) | 24/24 open; 1.6 gate **16/21** full flow (+Weeb Central, MangaDex, MangaFire, Mangahere, Kun Manga Online, Mangakakalot, **MANGA Plus by SHUEISHA**, **Shonen Jump+**, **Webtoons.com**, **MangaBuddy/MangaK**, **Rawkuma**); all 5 remaining failures are site-side (403/522/UA), zero VM errors |
+| 2026-11-25 | v0.2.0 | 0.2.0 + patch | 1.6.1–1.6.72 | 24 fixtures (`test/fixtures/`, 21 ext-lib 1.6) | 24/24 open; 1.6 gate **16/21** full flow (+Weeb Central, MangaDex, MangaFire, Mangahere, Kun Manga Online, Mangakakalot, **MANGA Plus by SHUEISHA**, **Shonen Jump+**, **Webtoons.com**, **MangaBuddy/MangaK**, **Rawkuma**); all 5 remaining failures are site-side (403/522/UA), zero VM errors |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
@@ -18,7 +18,7 @@ for the current 1.6 gate.
 
 | Generation | State | Missing |
 |---|---|---|
-| ext-lib **1.6.x** (current repo builds) | ⚠️ partial — see below | RSA/X509 crypto (manhuaren), site-side gatekeepers (baozimanhua), a few source-specific DOM/JSON edge cases |
+| ext-lib **1.6.x** (current repo builds) | ✅ supported (16/21 gated fixtures pass full flow; 0 VM errors) | RSA/X509 crypto (manhuaren), site-side Cloudflare/gatekeepers (baozimanhua, Asura Scans, MoeTruyen) |
 | ext-lib 1.4.x | ✅ works | — (Mihon 0.21 is the last major release supporting 1.4, and the repo stopped publishing it in 2026-10) |
 | ext-lib 1.5.x | untested | no APKs on hand |
 

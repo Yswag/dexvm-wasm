@@ -68,7 +68,7 @@ runtime, the hash is only a one-time supply-chain check.
 
 ```
 scripts/build.sh             # cargo build + wasm-opt -Oz + sha256
-scripts/release.sh v0.1.0    # same, plus dist/SHA256SUMS and BUILDINFO
+scripts/release.sh v0.2.0    # same, plus dist/SHA256SUMS and BUILDINFO
 node test/run.mjs fixtures   # corpus gate
 ```
 
@@ -80,8 +80,8 @@ Requires `rustup` with the `wasm32-wasip1` target, a host C compiler for build
 scripts, and optionally `wasm-opt` (binaryen). Expect ~20 minutes for a clean
 build.
 
-Sizes: 5,593,318 B after `cargo build --release`; 3,931,926 B after
-`wasm-opt -Oz` (−29.7%).
+Sizes: 5,812,938 B after `cargo build --release`; 4,076,176 B after
+`wasm-opt -Oz` (−29.9%).
 
 ## ABI
 
@@ -177,7 +177,7 @@ it. This is how a host-side WebView challenge can hand cookies back to the VM.
 
 ## Upstream changes
 
-Rust sources untouched. Only `Cargo.toml` — see
+`Cargo.toml` changes are tracked in
 [`patches/dexvm-0.2.0-cargo.patch`](patches/dexvm-0.2.0-cargo.patch):
 
 | change | reason |
@@ -186,31 +186,31 @@ Rust sources untouched. Only `Cargo.toml` — see
 | `zip` default-features off, `["deflate"]` | drops zstd/bzip2 |
 | `raqote` default-features off | drops text/font-kit |
 
-Two natives are registered from the bridge (`dexvm-bridge/src/shims.rs`):
-`Jsoup.parse(InputStream,String,String)` (missing upstream) and the
-`app.cash.quickjs.QuickJs` replacement. `compile`/`execute` (QuickJS bytecode)
-return `null`.
+In addition to the `Cargo.toml` patch, `vendor/dexvm/` carries targeted VM and
+shim fixes needed by ext-lib 1.6 sources (every edit site is marked `// wasm:`):
+bytecode fixes (`instance-of`, `const/high16`, `shl-long`/`shr-long`/`ushr-long`
+shift counts, DEX `const/4 0` null refs, UTF-16 `StringsKt.indexOf`),
+`SManga`/`SChapter` `memo` round-tripping, `kotlinx.serialization` JSON &
+ProtoBuf descriptor reflection (`SerialKind`, `AbstractDecoder`,
+`AbstractCollectionSerializer.merge`, `ByteArraySerializer`, boxed primitive
+serializers), `okio.Buffer$UnsafeCursor` + `ForwardingSource` draining,
+`android.graphics` `BitmapFactory`/`Canvas`/`Rect`/`Bitmap.compress`,
+`kotlinx.coroutines.sync.Mutex` overloads, jsoup `[attr~=regex]`/`:contains`,
+and `java.time`/`DecimalFormat`/`Map.computeIfAbsent` shims.
 
-The fork also carries small shim additions needed by ext-lib 1.6 sources —
-kotlinx.serialization singletons (`Json.Default`, `JsonElementSerializer`,
-`EnumSerializer.serialize`), `IntRange.iterator`, `DateTimeFormatter.parseCaseInsensitive`
-and the predefined `ISO_*` formatters, `Random.Default` + its `next*` family,
-`RoundingMode`, `Instant.Companion`, jsoup relative/`:contains` selectors,
-`Headers$Builder.get`, and non-panicking value access in
-`payload_of`/`str_of_jvalue`. Every edit site is marked `// wasm:`.
-
-The bridge also fills host gaps that the crate implements behind C features:
-QuickJS (`evaluate` returns real Java arrays/HashMap, `compile`/`execute`
-round-trip source), the shared cookie jar, `DateTimeFormatter.ofPattern(String)`,
-the jsoup `InputStream` base-URI overload, and image requests routed through
-the extension's own `getImageRequest`/`imageRequest`.
+The bridge (`dexvm-bridge/src/shims.rs` & `engine.rs`) fills host gaps that the
+crate implements behind C features: QuickJS (`evaluate` returns real Java
+arrays/`HashMap`, `compile`/`execute` round-trip source), the shared cookie
+jar, `DateTimeFormatter.ofPattern(String)`, the jsoup `InputStream` base-URI
+overload, `memo` serialization, and image requests routed through the
+extension's own `getImageRequest`/`imageRequest`.
 
 ## Verification
 
-Corpus: `test/fixtures/` — 14 APKs pinned in `run.mjs` (3 ext-lib 1.4, 11
-ext-lib 1.6); `multidex.apk` is a parser fixture. All 14 open and list sources;
+Corpus: `test/fixtures/` — 24 APKs pinned in `run.mjs` (3 ext-lib 1.4, 21
+ext-lib 1.6); `multidex.apk` is a parser fixture. All 24 open and list sources;
 ids, langs and base URLs match upstream expectations. The table below is the
-2026-11-08 v0.1.0 snapshot.
+2026-11-08 v0.1.0 1.4 baseline snapshot.
 
 | source | mangas | chapters | pages | image |
 |---|---|---|---|---|
@@ -233,12 +233,10 @@ Shonen Jump+, Webtoons.com, MangaK/MangaBuddy, and Rawkuma).
 * **Panics trap.** `wasm32-wasip1` has no unwinding, so `catch_unwind` is inert.
   The loader converts a trap into `DexvmError { kind: 'trap' }` and marks the
   instance unusable; recovery requires a fresh instance.
-* **ext-lib 1.6.x is partially supported.** The full-flow matrix is in
-  [`COMPAT.md`](COMPAT.md): 45 of the 97 current Chinese extensions pass
-  (dm5, Komiic, manhuagui, kaobeimanhua, 包子漫画, Pixiv, …), and a spot check
-  of 12 popular English extensions found no complete pass but several that
-  reach the reader. Remaining failures are predominantly site-side (Cloudflare,
-  logins, dead hosts) or a missing bundled library; no source crashes the VM.
+* **ext-lib 1.6.x edge cases.** 16/21 gated 1.6 fixtures pass end-to-end across
+  `zh`, `en`, `ja`, `vi`, and `all` with zero VM errors (see
+  [`COMPAT.md`](COMPAT.md)). Remaining failures are site-side (Cloudflare/403,
+  logins, dead hosts) or rare unshimmed libraries such as RSA/X509 crypto.
 * **`nsfw` is always `null`.** NSFW flags live in the extension index, not the APK.
 * **Image `Referer`.** Some CDNs reject requests without one, so `fetchImage`
   and `imageRequest` fall back to the source's `baseUrl` when the extension sets
