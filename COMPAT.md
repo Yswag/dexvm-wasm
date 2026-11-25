@@ -10,6 +10,7 @@ Update this table on every release. "Passing" means
 | 2026-11-08 | v0.1.0 | 0.2.0 + patch | 1.4.x, 1.6.3–1.6.8 | `test/fixtures/` (5 APKs) | 5/5 open + sources; MangaPill 1.4.9 and Comic Fury 1.4.8 complete the full flow including images |
 | 2026-11-12 | v0.2.0-beta.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + 97 zh sweep | 14/14 open; 1.6 gate 5/11 full flow (dm5, Komiic, manhuagui, kaobeimanhua, CuuTruyen); zh full-flow 45/97; EN spot check 0/12 but MangaDex reaches pages |
 | 2026-11-25 | v0.2.0 | 0.2.0 + patch | 1.6.1–1.6.72 | 24 fixtures (`test/fixtures/`, 21 ext-lib 1.6) | 24/24 open; 1.6 gate **16/21** full flow (+Weeb Central, MangaDex, MangaFire, Mangahere, Kun Manga Online, Mangakakalot, **MANGA Plus by SHUEISHA**, **Shonen Jump+**, **Webtoons.com**, **MangaBuddy/MangaK**, **Rawkuma**); all 5 remaining failures are site-side (403/522/UA), zero VM errors |
+| 2026-11-25 | v0.2.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; 1.6 gate **17/22** full flow (+**manhuagui v1.6.2** via `HttpSource.getHeaders()` → `headersBuilder()` / `configureHeaders()`, `AppInfo.INSTANCE`, and optional `open.defaultUserAgent`); 6/6 offline header unit tests pass |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
@@ -18,7 +19,7 @@ for the current 1.6 gate.
 
 | Generation | State | Missing |
 |---|---|---|
-| ext-lib **1.6.x** (current repo builds) | ✅ supported (16/21 gated fixtures pass full flow; 0 VM errors) | RSA/X509 crypto (manhuaren), site-side Cloudflare/gatekeepers (baozimanhua, Asura Scans, MoeTruyen) |
+| ext-lib **1.6.x** (current repo builds) | ✅ supported (17/22 gated fixtures pass full flow; 0 VM errors) | RSA/X509 crypto (manhuaren), site-side Cloudflare/gatekeepers (baozimanhua, Asura Scans, MoeTruyen) |
 | ext-lib 1.4.x | ✅ works | — (Mihon 0.21 is the last major release supporting 1.4, and the repo stopped publishing it in 2026-10) |
 | ext-lib 1.5.x | untested | no APKs on hand |
 
@@ -327,6 +328,31 @@ desktop-UA empty list):
 
 Unit test `vm::tests::ext16_shims_null_ref_regex_escape_and_jsoup_attr_regex`
 locks in these behaviors without requiring an external APK.
+
+### ext-lib 1.6 `configureHeaders()` & `defaultUserAgent` (2026-11-25, v0.2.1)
+
+* **`HttpSource.getHeaders()` → `headersBuilder().build()`**: previously
+  returned an empty `Headers` object without invoking `headersBuilder()`, so
+  `KeiSource.headersBuilder()` (which sets `Referer: "$baseUrl/"` and calls
+  `configureHeaders()`) and classic `HttpSource.headersBuilder()` overrides
+  were silently skipped. Default `*Request()` helpers (`mangaDetailsRequest`,
+  `chapterListRequest`, `pageListRequest`, `imageUrlRequest`, `imageRequest`)
+  now also attach `source.getHeaders()` to match upstream Mihon `HttpSource.kt`.
+* **Optional `open.defaultUserAgent`**: mirrors Mihon's
+  `NetworkHelper.defaultUserAgentProvider()` and `UserAgentInterceptor` —
+  seeds `HttpSource.headersBuilder()` and fills missing/empty `User-Agent`
+  headers without overriding any `User-Agent` declared by the extension. When
+  omitted, behavior stays no-UA by default.
+* **`eu.kanade.tachiyomi.AppInfo.INSTANCE` + `getVersionCode()`**: exposed the
+  Kotlin `object` singleton so `MangaDex` v1.6.5's `headersBuilder()` runs and
+  emits its own `Tachiyomi` UA + `Extra` header instead of a browser UA.
+* **New pinned fixture**: `tachiyomi-zh.manhuagui-v1.6.2.apk` (keiyoushi
+  release `582615a`, SHA-256
+  `d346f335b3211d26edb00d7b09ace3ed59758f2c1a16926fbf61fb57f2543728`) passes the
+  full flow (42 mangas / 235 chapters / 230 pages / 178,932 B `image/webp`).
+* **Offline unit test**: `test/headers.test.mjs` (`node --test test/headers.test.mjs`)
+  verifies the SHA-256 pin, `configureHeaders()` propagation, `defaultUserAgent`
+  precedence, classic `HttpSource` default behavior, and MangaDex's non-browser UA.
 
 ### Inverse gap scan (2026-11-12)
 

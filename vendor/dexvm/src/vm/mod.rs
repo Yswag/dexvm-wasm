@@ -169,6 +169,13 @@ pub struct Vm {
     /// as headers only when the request does not already set them.
     #[cfg(feature = "tachiyomi")]
     pub host_headers: Option<native::keiyoushi::HostHeaderFn>,
+    /// Optional host-supplied default User-Agent (mirrors Mihon's
+    /// `NetworkHelper.defaultUserAgentProvider`). Used by
+    /// `HttpSource.headersBuilder()` and `UserAgentInterceptor` only when
+    /// provided; `None` preserves the stock no-UA behavior.
+    // wasm:
+    #[cfg(feature = "tachiyomi")]
+    pub default_user_agent: Option<String>,
     /// Real host directory backing `Context.getCacheDir()` (created on first
     /// use so extension cache logic runs against a genuine filesystem).
     pub cache_root: Option<String>,
@@ -246,6 +253,9 @@ impl Vm {
             http: None,
             #[cfg(feature = "tachiyomi")]
             host_headers: None,
+            // wasm:
+            #[cfg(feature = "tachiyomi")]
+            default_user_agent: None,
             host_natives: Vec::new(),
             perms: crate::permission::Permissions::new(),
         };

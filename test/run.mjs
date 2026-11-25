@@ -259,6 +259,7 @@ const FIXTURE_APKS = [
   'tachiyomi-zh.dm5-v1.6.4.apk',
   'tachiyomi-zh.komiic-v1.6.11.apk',
   'tachiyomi-zh.manhuagui-v1.6.1.apk',
+  'tachiyomi-zh.manhuagui-v1.6.2.apk',
   'tachiyomi-zh.kaobeimanhua-v1.6.1.apk',
   'tachiyomi-zh.baozimanhua-v1.6.33.apk',
   'tachiyomi-all.mangadex-v1.6.5.apk',

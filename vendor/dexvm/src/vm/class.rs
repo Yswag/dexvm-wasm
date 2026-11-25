@@ -3741,12 +3741,18 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         0
     ),
     // audit gap shim classes (tachiyomi)
+    // wasm: AppInfo is a Kotlin object; expose INSTANCE for MangaDex headersBuilder().
     #[cfg(feature = "tachiyomi")]
     shim!(
         "Leu/kanade/tachiyomi/AppInfo;",
         Some("Ljava/lang/Object;"),
         &[],
-        0
+        0,
+        [sdef!(
+            "INSTANCE",
+            "Leu/kanade/tachiyomi/AppInfo;",
+            ShimValue::Lazy(native::lazy_app_info_inst)
+        )]
     ),
     #[cfg(feature = "tachiyomi")]
     shim!(

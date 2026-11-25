@@ -25,8 +25,8 @@ jobs:
       - name: Build wasm
         run: scripts/build.sh
 
-      - name: Smoke test (open + sources + filters on 5 fixture APKs)
-        run: node test/smoke.mjs && node test/run.mjs fixtures
+      - name: Smoke test and unit tests
+        run: node test/smoke.mjs && node test/run.mjs fixtures && node --test test/headers.test.mjs
 
       - name: Upload wasm (build artifact)
         uses: actions/upload-artifact@v4

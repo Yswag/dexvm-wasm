@@ -666,6 +666,57 @@ pub(crate) fn interceptor_pass_through(vm: &mut Vm, args: &[JValue]) -> R {
     chain_proceed(vm, &[chain, request])
 }
 
+// wasm: mirrors Mihon's UserAgentInterceptor: inject default_user_agent only
+// when configured by the host and the request lacks a non-empty User-Agent.
+pub(crate) fn user_agent_interceptor_intercept(vm: &mut Vm, args: &[JValue]) -> R {
+    let chain = args[1];
+    let request = match payload(vm, chain) {
+        Some(Native::Chain { request, .. }) => *request,
+        _ => return Err(npe(vm)),
+    };
+    let default_ua = vm
+        .default_user_agent
+        .as_ref()
+        .filter(|s| !s.is_empty())
+        .cloned();
+    let request = if let Some(ua) = default_ua {
+        let needs_ua = match payload(vm, request) {
+            Some(Native::Request { headers, .. }) => !headers
+                .iter()
+                .any(|(k, v)| k.eq_ignore_ascii_case("User-Agent") && !v.is_empty()),
+            _ => false,
+        };
+        if needs_ua {
+            let Some(Native::Request {
+                url,
+                method,
+                mut headers,
+                body,
+            }) = payload(vm, request).cloned()
+            else {
+                return Err(npe(vm));
+            };
+            headers.retain(|(k, _)| !k.eq_ignore_ascii_case("User-Agent"));
+            headers.push(("User-Agent".to_string(), ua));
+            alloc(
+                vm,
+                REQUEST,
+                Native::Request {
+                    url,
+                    method,
+                    headers,
+                    body,
+                },
+            )?
+        } else {
+            request
+        }
+    } else {
+        request
+    };
+    chain_proceed(vm, &[chain, request])
+}
+
 pub(crate) fn compression_interceptor_init(_vm: &mut Vm, _args: &[JValue]) -> R {
     Ok(JValue::Null)
 }
@@ -2593,6 +2644,17 @@ fn host_execute(vm: &mut Vm, request: JValue) -> R {
             {
                 headers.push(("Cookie".to_string(), cookie));
             }
+        }
+    }
+    // wasm: mirror UserAgentInterceptor for default Opaque clients when
+    // defaultUserAgent is provided by the host.
+    if let Some(ua) = vm.default_user_agent.as_ref().filter(|s| !s.is_empty()) {
+        if !headers
+            .iter()
+            .any(|(k, v)| k.eq_ignore_ascii_case("User-Agent") && !v.is_empty())
+        {
+            headers.retain(|(k, _)| !k.eq_ignore_ascii_case("User-Agent"));
+            headers.push(("User-Agent".to_string(), ua.clone()));
         }
     }
     debug!("DBG HOST fetch {method} {url} hdrs={}", headers.len());

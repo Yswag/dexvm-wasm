@@ -68,7 +68,7 @@ runtime, the hash is only a one-time supply-chain check.
 
 ```
 scripts/build.sh             # cargo build + wasm-opt -Oz + sha256
-scripts/release.sh v0.2.0    # same, plus dist/SHA256SUMS and BUILDINFO
+scripts/release.sh v0.2.1    # same, plus dist/SHA256SUMS and BUILDINFO
 node test/run.mjs fixtures   # corpus gate
 ```
 
@@ -120,7 +120,7 @@ Other `fd_*` return `EBADF`; `path_*` return `ENOSYS`.
 
 | op | arguments | returns |
 |---|---|---|
-| `open` | `apkBase64`, `prefs?` | `{ handle, manifest }` |
+| `open` | `apkBase64`, `prefs?`, `defaultUserAgent?`, `logLevel?` | `{ handle, manifest }` |
 | `sources` | — | `Source[]` |
 | `popular` / `latest` | `sourceId`, `page` | `MangaPage` |
 | `filters` | `sourceId` | `FilterDef[]` |
@@ -155,7 +155,6 @@ type SettingsNode = { key: string|null; title: string|null; summary: string|null
                       entryValues: string[]; defaultText: string|null;
                       defaultValues: string[]; children: SettingsNode[] };
 type Manifest = { packageId: string; appName: string; versionName: string|null;
-                  extensionLib: string|null; supported: boolean;
                   minSdk: number|null; targetSdk: number|null;
                   iconResourceId: number|null; nsfw: null };
 ```
@@ -169,6 +168,13 @@ untouched and the last response's `content-type`.
 
 `open`'s `prefs` uses the same shape as `exportPrefs` and is seeded before the
 extension reads it: `{ "source_3973269831131863421": { "website_password": "…" } }`.
+
+`open`'s optional `defaultUserAgent` mirrors Mihon's
+`NetworkHelper.defaultUserAgentProvider()`: when provided, it seeds
+`HttpSource.headersBuilder()` and fills missing/empty `User-Agent` headers in
+`UserAgentInterceptor` without overriding any `User-Agent` declared by the
+extension (e.g. via `configureHeaders()` or `headersBuilder()`). Omitting it
+preserves the default no-UA behavior.
 
 `cookies` is the jar shared by `host.http` and `android.webkit.CookieManager`.
 `set` takes `[[host, name, value], …]`, `import` takes an `exportPrefs`-shaped
@@ -196,6 +202,8 @@ ProtoBuf descriptor reflection (`SerialKind`, `AbstractDecoder`,
 serializers), `okio.Buffer$UnsafeCursor` + `ForwardingSource` draining,
 `android.graphics` `BitmapFactory`/`Canvas`/`Rect`/`Bitmap.compress`,
 `kotlinx.coroutines.sync.Mutex` overloads, jsoup `[attr~=regex]`/`:contains`,
+`HttpSource.getHeaders()`/`headersBuilder()`/`configureHeaders()` +
+`UserAgentInterceptor` + `AppInfo.INSTANCE`,
 and `java.time`/`DecimalFormat`/`Map.computeIfAbsent` shims.
 
 The bridge (`dexvm-bridge/src/shims.rs` & `engine.rs`) fills host gaps that the
@@ -207,8 +215,8 @@ extension's own `getImageRequest`/`imageRequest`.
 
 ## Verification
 
-Corpus: `test/fixtures/` — 24 APKs pinned in `run.mjs` (3 ext-lib 1.4, 21
-ext-lib 1.6); `multidex.apk` is a parser fixture. All 24 open and list sources;
+Corpus: `test/fixtures/` — 25 APKs pinned in `run.mjs` (3 ext-lib 1.4, 22
+ext-lib 1.6); `multidex.apk` is a parser fixture. All 25 open and list sources;
 ids, langs and base URLs match upstream expectations. The table below is the
 2026-11-08 v0.1.0 1.4 baseline snapshot.
 
@@ -223,9 +231,9 @@ first three mangas (site data).
 
 The ext-lib 1.6 builds currently published by the keiyoushi repo are
 gated by `node test/run.mjs 1.6`; see `COMPAT.md` for the per-source
-matrix (**16/21** ext-lib 1.6 fixtures currently pass end to end: dm5, Komiic,
-manhuagui, kaobeimanhua, CuuTruyen, Weeb Central, MangaDex, MangaFire,
-Mangahere, Kun Manga Online, Mangakakalot, MANGA Plus by SHUEISHA,
+matrix (**17/22** ext-lib 1.6 fixtures currently pass end to end: dm5, Komiic,
+manhuagui v1.6.1 & v1.6.2, kaobeimanhua, CuuTruyen, Weeb Central, MangaDex,
+MangaFire, Mangahere, Kun Manga Online, Mangakakalot, MANGA Plus by SHUEISHA,
 Shonen Jump+, Webtoons.com, MangaK/MangaBuddy, and Rawkuma).
 
 ## Limitations
@@ -233,7 +241,7 @@ Shonen Jump+, Webtoons.com, MangaK/MangaBuddy, and Rawkuma).
 * **Panics trap.** `wasm32-wasip1` has no unwinding, so `catch_unwind` is inert.
   The loader converts a trap into `DexvmError { kind: 'trap' }` and marks the
   instance unusable; recovery requires a fresh instance.
-* **ext-lib 1.6.x edge cases.** 16/21 gated 1.6 fixtures pass end-to-end across
+* **ext-lib 1.6.x edge cases.** 17/22 gated 1.6 fixtures pass end-to-end across
   `zh`, `en`, `ja`, `vi`, and `all` with zero VM errors (see
   [`COMPAT.md`](COMPAT.md)). Remaining failures are site-side (Cloudflare/403,
   logins, dead hosts) or rare unshimmed libraries such as RSA/X509 crypto.

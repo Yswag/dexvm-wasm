@@ -92,8 +92,18 @@ pub(crate) fn lazy_update_strategy_once(vm: &mut Vm) -> JValue {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn keiyoushi_execute(vm: &mut Vm, args: &[JValue]) -> R {
-    let (url, method, headers, body) = request_parts(vm, args[0])?;
+    let (url, method, mut headers, body) = request_parts(vm, args[0])?;
     check_network_url(vm, &url)?;
+    // wasm: mirror UserAgentInterceptor when defaultUserAgent is provided by host.
+    if let Some(ua) = vm.default_user_agent.as_ref().filter(|s| !s.is_empty()) {
+        if !headers
+            .iter()
+            .any(|(k, v)| k.eq_ignore_ascii_case("User-Agent") && !v.is_empty())
+        {
+            headers.retain(|(k, _)| !k.eq_ignore_ascii_case("User-Agent"));
+            headers.push(("User-Agent".to_string(), ua.clone()));
+        }
+    }
     if std::env::var("DEXVM_TRACE").is_ok() {
         eprintln!("DEXVM_TRACE http-req {method} {url}");
     }
@@ -257,12 +267,28 @@ pub(crate) fn http_source_get_base_url(vm: &mut Vm, args: &[JValue]) -> R {
     http_source_abstract(vm, args, "getBaseUrl")
 }
 
-pub(crate) fn http_source_get_headers_default(vm: &mut Vm, _args: &[JValue]) -> R {
-    alloc(vm, HEADERS, Native::Headers(Vec::new()))
+pub(crate) fn http_source_get_headers_default(vm: &mut Vm, args: &[JValue]) -> R {
+    // wasm: mirror Mihon HttpSource.headers (`headersBuilder().build()`) and
+    // KeiSource's non-lazy `headers$delegate` so `headersBuilder()` and
+    // `KeiSource.configureHeaders()` overrides apply.
+    let builder = inv_virt(
+        vm,
+        args[0],
+        "headersBuilder",
+        "()Lokhttp3/Headers$Builder;",
+        &[],
+    )?;
+    inv_virt(vm, builder, "build", "()Lokhttp3/Headers;", &[])
 }
 
 pub(crate) fn http_source_headers_builder(vm: &mut Vm, _args: &[JValue]) -> R {
-    alloc(vm, "Lokhttp3/Headers$Builder;", Native::Headers(Vec::new()))
+    // wasm: mirror Mihon HttpSource.headersBuilder(), seeding User-Agent from
+    // the host's defaultUserAgent when provided (None keeps empty headers).
+    let mut entries = Vec::new();
+    if let Some(ua) = vm.default_user_agent.as_ref().filter(|s| !s.is_empty()) {
+        entries.push(("User-Agent".to_string(), ua.clone()));
+    }
+    alloc(vm, "Lokhttp3/Headers$Builder;", Native::Headers(entries))
 }
 
 fn http_source_fetch(
@@ -523,6 +549,15 @@ fn obj_url(vm: &mut Vm, v: JValue) -> Option<String> {
     }
 }
 
+// wasm: resolve `this.headers` via virtual `getHeaders()` for default *Request() methods.
+fn source_headers(vm: &mut Vm, src: JValue) -> Result<Vec<(String, String)>, NatErr> {
+    let hdrs = inv_virt(vm, src, "getHeaders", "()Lokhttp3/Headers;", &[])?;
+    Ok(match payload(vm, hdrs) {
+        Some(Native::Headers(h)) => h.clone(),
+        _ => Vec::new(),
+    })
+}
+
 fn http_source_get_request(vm: &mut Vm, src: JValue, obj: JValue) -> R {
     let Some(url) = obj_url(vm, obj) else {
         return Err(npe(vm));
@@ -532,13 +567,15 @@ fn http_source_get_request(vm: &mut Vm, src: JValue, obj: JValue) -> R {
     } else {
         format!("{}{url}", source_base_url(vm, src)?)
     };
+    // wasm: include source.headers (matches Mihon HttpSource.kt `GET(url, headers)`).
+    let headers = source_headers(vm, src)?;
     alloc(
         vm,
         REQUEST,
         Native::Request {
             url: full,
             method: "GET".into(),
-            headers: Vec::new(),
+            headers,
             body: None,
         },
     )
@@ -581,19 +618,41 @@ pub(crate) fn http_source_page_list_request(vm: &mut Vm, args: &[JValue]) -> R {
     http_source_get_request(vm, args[0], args[1])
 }
 
-/// Host default for `imageRequest`: `GET page.imageUrl`.
-pub(crate) fn http_source_image_request(vm: &mut Vm, args: &[JValue]) -> R {
+/// Host default for `imageUrlRequest`: `GET(page.url, headers)`.
+// wasm:
+pub(crate) fn http_source_image_url_request(vm: &mut Vm, args: &[JValue]) -> R {
     let url = match payload(vm, args[1]) {
-        Some(Native::SPPage { image_url, .. }) => image_url.clone(),
+        Some(Native::SPPage { url, .. }) => url.clone(),
         _ => return Err(npe(vm)),
     };
+    let headers = source_headers(vm, args[0])?;
     alloc(
         vm,
         REQUEST,
         Native::Request {
             url,
             method: "GET".into(),
-            headers: Vec::new(),
+            headers,
+            body: None,
+        },
+    )
+}
+
+/// Host default for `imageRequest`: `GET(page.imageUrl, headers)`.
+pub(crate) fn http_source_image_request(vm: &mut Vm, args: &[JValue]) -> R {
+    let url = match payload(vm, args[1]) {
+        Some(Native::SPPage { image_url, .. }) => image_url.clone(),
+        _ => return Err(npe(vm)),
+    };
+    // wasm: include source.headers (matches Mihon HttpSource.kt `GET(page.imageUrl!!, headers)`).
+    let headers = source_headers(vm, args[0])?;
+    alloc(
+        vm,
+        REQUEST,
+        Native::Request {
+            url,
+            method: "GET".into(),
+            headers,
             body: None,
         },
     )
@@ -1519,8 +1578,17 @@ fn filter_sort_get_values(vm: &mut Vm, args: &[JValue]) -> R {
     })
 }
 
+// wasm: AppInfo.INSTANCE singleton + getVersionCode() (used by MangaDex headersBuilder).
+pub fn lazy_app_info_inst(vm: &mut Vm) -> JValue {
+    opaque_inst(vm, "Leu/kanade/tachiyomi/AppInfo;")
+}
+
 pub(crate) fn app_info_get_version_name(vm: &mut Vm, _args: &[JValue]) -> R {
     Ok(new_str(vm, "1.4.0"))
+}
+
+pub(crate) fn app_info_get_version_code(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Int(1))
 }
 
 pub(crate) fn http_exception_init(vm: &mut Vm, args: &[JValue]) -> R {
@@ -1582,6 +1650,12 @@ pub(crate) fn http_source_get_network(vm: &mut Vm, _args: &[JValue]) -> R {
 
 pub(crate) fn network_helper_get_client(vm: &mut Vm, _args: &[JValue]) -> R {
     alloc(vm, "Lokhttp3/OkHttpClient;", Native::Opaque)
+}
+
+// wasm: mirrors Mihon NetworkHelper.defaultUserAgentProvider().
+pub(crate) fn network_helper_default_user_agent_provider(vm: &mut Vm, _args: &[JValue]) -> R {
+    let ua = vm.default_user_agent.as_deref().unwrap_or("").to_string();
+    Ok(new_str(vm, &ua))
 }
 
 pub(crate) fn requests_kt_post_default(vm: &mut Vm, args: &[JValue]) -> R {
@@ -1736,6 +1810,7 @@ pub const KEIYOUSHI_TABLE: &[NativeEntry] = &[
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "pageListRequest", "(Leu/kanade/tachiyomi/source/model/SChapter;)Lokhttp3/Request;", true, http_source_page_list_request),
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "getMangaUrl", "(Leu/kanade/tachiyomi/source/model/SManga;)Ljava/lang/String;", true, http_source_get_manga_url),
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "getChapterUrl", "(Leu/kanade/tachiyomi/source/model/SChapter;)Ljava/lang/String;", true, http_source_get_chapter_url),
+    ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "imageUrlRequest", "(Leu/kanade/tachiyomi/source/model/Page;)Lokhttp3/Request;", true, http_source_image_url_request),
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "imageRequest", "(Leu/kanade/tachiyomi/source/model/Page;)Lokhttp3/Request;", true, http_source_image_request),
     ne!("Leu/kanade/tachiyomi/network/RequestsKt;", "GET$default", "(Ljava/lang/String;Lokhttp3/Headers;Lokhttp3/CacheControl;ILjava/lang/Object;)Lokhttp3/Request;", false, requests_kt_get_default),
     ne!("Leu/kanade/tachiyomi/network/RequestsKt;", "GET$default", "(Lokhttp3/HttpUrl;Lokhttp3/Headers;Lokhttp3/CacheControl;ILjava/lang/Object;)Lokhttp3/Request;", false, requests_kt_get_default),
@@ -1747,6 +1822,7 @@ pub const KEIYOUSHI_TABLE: &[NativeEntry] = &[
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "getNetwork", "()Leu/kanade/tachiyomi/network/NetworkHelper;", true, http_source_get_network),
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "getClient", "()Lokhttp3/OkHttpClient;", true, network_helper_get_client),
     ne!("Leu/kanade/tachiyomi/network/NetworkHelper;", "getClient", "()Lokhttp3/OkHttpClient;", true, network_helper_get_client),
+    ne!("Leu/kanade/tachiyomi/network/NetworkHelper;", "defaultUserAgentProvider", "()Ljava/lang/String;", true, network_helper_default_user_agent_provider),
     ne!("Leu/kanade/tachiyomi/network/RequestsKt;", "POST$default", "(Ljava/lang/String;Lokhttp3/Headers;Lokhttp3/RequestBody;Lokhttp3/CacheControl;ILjava/lang/Object;)Lokhttp3/Request;", false, requests_kt_post_default),
     ne!("Leu/kanade/tachiyomi/network/RequestsKt;", "POST", "(Ljava/lang/String;Lokhttp3/Headers;Lokhttp3/RequestBody;Lokhttp3/CacheControl;)Lokhttp3/Request;", false, requests_kt_post_default),
     ne!(
@@ -1768,7 +1844,7 @@ pub const KEIYOUSHI_TABLE: &[NativeEntry] = &[
         "intercept",
         "(Lokhttp3/Interceptor$Chain;)Lokhttp3/Response;",
         true,
-        crate::vm::native::okhttp::interceptor_pass_through
+        crate::vm::native::okhttp::user_agent_interceptor_intercept
     ),
     ne!(
         "Leu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor;",
@@ -1874,6 +1950,13 @@ pub const KEIYOUSHI_TABLE: &[NativeEntry] = &[
         "()Ljava/lang/String;",
         true,
         app_info_get_version_name
+    ),
+    ne!(
+        "Leu/kanade/tachiyomi/AppInfo;",
+        "getVersionCode",
+        "()I",
+        true,
+        app_info_get_version_code
     ),
     ne!(
         "Leu/kanade/tachiyomi/network/HttpException;",

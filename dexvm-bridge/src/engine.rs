@@ -740,6 +740,14 @@ fn op_open(req: &Value) -> R<Value> {    use base64::Engine as _;
     }
     let mut k = Keiyoushi::new(&data).map_err(|e| err("load", format!("cannot load extension: {e}")))?;
     k.set_http(on_http);
+    if let Some(ua) = req
+        .get("defaultUserAgent")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        k.set_default_user_agent(Some(ua.to_string()));
+    }
     // Bridge-side extras (Jsoup InputStream overload, quickjs replacement).
     if let Err(e) = k.ctx().register_natives(&[crate::shims::EXTRA_NATIVES]) {
         crate::host::log_line(3, &format!("dexvm-bridge: extra natives failed: {e}"));

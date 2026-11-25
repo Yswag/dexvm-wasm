@@ -711,6 +711,15 @@ impl Context {
         self.vm.host_headers = Some(std::rc::Rc::new(f));
     }
 
+    // wasm: optional host-supplied default User-Agent for HttpSource.headersBuilder()
+    // and UserAgentInterceptor.
+    #[cfg(feature = "tachiyomi")]
+    pub fn set_default_user_agent(&mut self, ua: Option<String>) {
+        self.vm.default_user_agent = ua
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+    }
+
     /// Access to the underlying VM for advanced use (registering natives
     /// that need to call back into dex code, checking permissions, etc.).
     pub fn vm(&mut self) -> &mut Vm {

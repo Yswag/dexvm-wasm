@@ -152,6 +152,11 @@ impl Keiyoushi {
         self.ctx.set_host_headers(f);
     }
 
+    // wasm: optional host-supplied default User-Agent (Mihon's defaultUserAgentProvider).
+    pub fn set_default_user_agent(&mut self, ua: Option<String>) {
+        self.ctx.set_default_user_agent(ua);
+    }
+
     /// Selects the host-owned file used to persist Android
     /// `SharedPreferences`. Without this, preferences remain in memory only.
     pub fn set_shared_preferences_path(&mut self, path: impl AsRef<std::path::Path>) {
