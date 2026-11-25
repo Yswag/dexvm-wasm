@@ -675,6 +675,7 @@ pub fn dispatch(op: &str, req: &Value) -> R<Value> {
                 "preferences" => with_engine(h, |e| op_preferences(e, req)),
                 "setPreference" => with_engine(h, |e| op_set_preference(e, req)),
                 "exportPrefs" => with_engine(h, |e| op_export_prefs(e)),
+                "runPending" => with_engine(h, |e| op_run_pending(e, req)),
                 "close" => op_close(h),
                 "debug" => with_engine(h, |e| {
                     let desc = s(req, "class");
@@ -1075,6 +1076,22 @@ fn op_export_prefs(e: &mut Engine) -> R<Value> {
         out.insert(name, Value::Object(obj));
     }
     Ok(Value::Object(out))
+}
+
+fn op_run_pending(e: &mut Engine, req: &Value) -> R<Value> {
+    let max_jobs = req
+        .get("maxJobs")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as usize);
+    let (ran, remaining, next_due_ms) = e.k.run_pending(max_jobs);
+    let mut out = json!({
+        "ran": ran,
+        "remaining": remaining,
+    });
+    if let Some(ms) = next_due_ms {
+        out["nextDueMs"] = json!(ms);
+    }
+    Ok(out)
 }
 
 fn op_close(h: u32) -> R<Value> {

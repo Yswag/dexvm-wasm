@@ -102,29 +102,172 @@ pub(crate) fn mutex_is_locked(vm: &mut Vm, args: &[JValue]) -> R {
         _ => Err(npe(vm)),
     }
 }
+// wasm: run one step of a PendingJob; returns Ok(true) if suspended again, Ok(false) if completed.
+fn execute_pending_step(vm: &mut Vm, job: &mut crate::vm::PendingJob, allow_suspend: bool) -> Result<bool, crate::vm::error::JvmError> {
+    let prev_running = vm.running_pending_job;
+    let prev_suspend = vm.pending_suspend.take();
+    vm.running_pending_job = allow_suspend;
+
+    let res = match job.continuation {
+        None => vm.invoke_virtual_args(
+            job.block,
+            "invoke",
+            "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+            vec![job.scope, JValue::Null],
+        ),
+        Some(cont) => resume_continuation_chain(vm, cont),
+    };
+
+    let susp = vm.pending_suspend.take();
+    vm.running_pending_job = prev_running;
+    vm.pending_suspend = prev_suspend;
+
+    match res {
+        Ok(val) if allow_suspend && vm.is_coroutine_suspended(val) => {
+            if let Some((next_cont, due_at_ms)) = susp {
+                job.continuation = Some(next_cont);
+                job.due_at_ms = due_at_ms;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
+        Ok(_) => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+fn resume_continuation_chain(
+    vm: &mut Vm,
+    start: JValue,
+) -> Result<JValue, crate::vm::error::JvmError> {
+    let mut cur = start;
+    let mut param = lazy_unit_instance(vm);
+    loop {
+        let val = vm.invoke_virtual_args(
+            cur,
+            "invokeSuspend",
+            "(Ljava/lang/Object;)Ljava/lang/Object;",
+            vec![param],
+        )?;
+        if vm.is_coroutine_suspended(val) {
+            return Ok(val);
+        }
+        let parent = match cur {
+            JValue::Obj(id) => vm.continuation_completions.get(&id).copied(),
+            _ => None,
+        };
+        match parent {
+            Some(p) if !p.is_null_ref() => {
+                cur = p;
+                param = val;
+            }
+            _ => return Ok(val),
+        }
+    }
+}
+
+fn format_jvm_error(vm: &Vm, e: &crate::vm::error::JvmError) -> String {
+    match e {
+        crate::vm::error::JvmError::Uncaught(id) => {
+            let class = vm
+                .arena
+                .objects
+                .get(*id as usize)
+                .map(|o| vm.class_desc_str(o.class))
+                .unwrap_or_default();
+            let msg = vm
+                .payload_of(JValue::Obj(*id))
+                .and_then(|p| match p {
+                    Native::Throwable { message, .. } => message.clone(),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            format!("uncaught {class}: {msg}")
+        }
+        other => other.to_string(),
+    }
+}
+
+/// Runs currently-due pending detached coroutine jobs in this VM instance.
+/// Returns `(ran, remaining, next_due_ms)`.
+// wasm:
+pub fn run_pending_jobs(vm: &mut Vm, max_jobs: Option<usize>) -> (usize, usize, Option<u64>) {
+    let limit = max_jobs.unwrap_or(usize::MAX).max(1);
+    let mut ran = 0usize;
+
+    while ran < limit {
+        let now_ms = Vm::monotonic_ms();
+        let Some(pos) = vm.pending_jobs.iter().position(|j| j.due_at_ms <= now_ms) else {
+            break;
+        };
+        let mut job = vm.pending_jobs.remove(pos);
+        let job_id = job.job_obj;
+        vm.job_states.insert(job_id, crate::vm::JobState::Running);
+        ran += 1;
+
+        match execute_pending_step(vm, &mut job, true) {
+            Ok(true) => {
+                // Suspended again via delay(); re-queue unless cancelled during step.
+                if vm.job_states.get(&job_id) != Some(&crate::vm::JobState::Cancelled) {
+                    vm.job_states.insert(job_id, crate::vm::JobState::Pending);
+                    vm.pending_jobs.push(job);
+                }
+            }
+            Ok(false) => {
+                if vm.job_states.get(&job_id) != Some(&crate::vm::JobState::Cancelled) {
+                    vm.job_states.insert(job_id, crate::vm::JobState::Completed);
+                }
+            }
+            Err(e) => {
+                let desc = format_jvm_error(vm, &e);
+                log::warn!("dexvm pending job failed: {desc}");
+                vm.job_states.insert(job_id, crate::vm::JobState::Completed);
+            }
+        }
+    }
+
+    let now_ms = Vm::monotonic_ms();
+    let remaining = vm.pending_jobs.len();
+    let next_due_ms = vm
+        .pending_jobs
+        .iter()
+        .map(|j| j.due_at_ms.saturating_sub(now_ms))
+        .min();
+    (ran, remaining, next_due_ms)
+}
+
 pub(crate) fn coroutines_launch_default(vm: &mut Vm, args: &[JValue]) -> R {
-    // wasm: detached `GlobalScope.launch` is fire-and-forget background work
-    // (e.g. Manhuagui's delayed ajax pings, KeiSource background filter refresh).
-    // Drop it rather than blocking the main synchronous op; structured scopes
-    // (`coroutineScope { launch { ... } }`) still execute inline.
-    let is_global = match args.first() {
-        Some(JValue::Obj(id)) => vm
-            .arena
-            .objects
-            .get(*id as usize)
-            .map(|o| vm.str_of(vm.classes[o.class as usize].descriptor) == "Lkotlinx/coroutines/GlobalScope;")
-            .unwrap_or(false),
+    // wasm: structured concurrency scopes (`coroutineScope { launch {} }`,
+    // `supervisorScope`, `withContext`) run inline; detached launches
+    // (`GlobalScope.launch`, `CoroutineScope(...).launch`) are enqueued to
+    // `vm.pending_jobs` and executed later via `runPending` (or inline on `join()`).
+    let is_structured = match args.first() {
+        Some(JValue::Obj(id)) => vm.structured_scopes.contains(id),
         _ => false,
     };
-    if !is_global {
+    let job = alloc(vm, "Lkotlinx/coroutines/Job;", Native::Opaque)?;
+    let job_id = job.as_obj();
+    if is_structured {
+        vm.job_states.insert(job_id, crate::vm::JobState::Running);
         let _ = vm.invoke_virtual_args(
             args[3],
             "invoke",
             "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
             vec![args[0], JValue::Null],
         );
+        vm.job_states.insert(job_id, crate::vm::JobState::Completed);
+    } else {
+        vm.job_states.insert(job_id, crate::vm::JobState::Pending);
+        vm.pending_jobs.push(crate::vm::PendingJob {
+            job_obj: job_id,
+            scope: args[0],
+            block: args[3],
+            continuation: None,
+            due_at_ms: 0,
+        });
     }
-    alloc(vm, "Lkotlinx/coroutines/Job;", Native::Opaque)
+    Ok(job)
 }
 /// wasm: `CoroutineStart` constants.
 pub(crate) fn lazy_coroutine_start(vm: &mut Vm) -> JValue {
@@ -132,18 +275,79 @@ pub(crate) fn lazy_coroutine_start(vm: &mut Vm) -> JValue {
 }
 
 /// `delay(millis, continuation)` / `delay-VtjQ1oo(durationMs, continuation)`.
-// wasm: delegate positive delays to std::thread::sleep (-> WASI poll_oneoff -> host sleep).
+// wasm: inside `runPending`, suspend truly by returning COROUTINE_SUSPENDED and
+// recording the continuation + due timestamp; elsewhere sleep via WASI poll_oneoff.
 pub(crate) fn coroutines_delay(vm: &mut Vm, args: &[JValue]) -> R {
     let millis = long_of(vm, args[0]);
     if millis > 0 {
+        if vm.running_pending_job && args.len() > 1 && !args[1].is_null_ref() {
+            let due_at_ms = Vm::monotonic_ms().saturating_add(millis as u64);
+            vm.pending_suspend = Some((args[1], due_at_ms));
+            return Ok(vm.coroutine_suspended_token());
+        }
         std::thread::sleep(std::time::Duration::from_millis(millis as u64));
     }
     Ok(lazy_unit_instance(vm))
 }
+
+pub(crate) fn job_is_active(vm: &mut Vm, args: &[JValue]) -> R {
+    let active = match args.first() {
+        Some(JValue::Obj(id)) => matches!(
+            vm.job_states.get(id),
+            Some(crate::vm::JobState::Pending | crate::vm::JobState::Running) | None
+        ),
+        _ => false,
+    };
+    Ok(JValue::Int(i32::from(active)))
+}
+
+pub(crate) fn job_is_completed(vm: &mut Vm, args: &[JValue]) -> R {
+    let completed = match args.first() {
+        Some(JValue::Obj(id)) => matches!(
+            vm.job_states.get(id),
+            Some(crate::vm::JobState::Completed | crate::vm::JobState::Cancelled)
+        ),
+        _ => false,
+    };
+    Ok(JValue::Int(i32::from(completed)))
+}
+
+pub(crate) fn job_is_cancelled(vm: &mut Vm, args: &[JValue]) -> R {
+    let cancelled = match args.first() {
+        Some(JValue::Obj(id)) => {
+            matches!(vm.job_states.get(id), Some(crate::vm::JobState::Cancelled))
+        }
+        _ => false,
+    };
+    Ok(JValue::Int(i32::from(cancelled)))
+}
+
+pub(crate) fn job_join(vm: &mut Vm, args: &[JValue]) -> R {
+    let Some(JValue::Obj(job_id)) = args.first().copied() else {
+        return Ok(lazy_unit_instance(vm));
+    };
+    if let Some(pos) = vm.pending_jobs.iter().position(|j| j.job_obj == job_id) {
+        let mut job = vm.pending_jobs.remove(pos);
+        vm.job_states.insert(job_id, crate::vm::JobState::Running);
+        if let Err(e) = execute_pending_step(vm, &mut job, false) {
+            let desc = format_jvm_error(vm, &e);
+            log::warn!("dexvm joined job failed: {desc}");
+        }
+        if vm.job_states.get(&job_id) != Some(&crate::vm::JobState::Cancelled) {
+            vm.job_states.insert(job_id, crate::vm::JobState::Completed);
+        }
+    }
+    Ok(lazy_unit_instance(vm))
+}
+
 pub(crate) fn coroutines_supervisor_job_default(vm: &mut Vm, _args: &[JValue]) -> R {
     alloc(vm, "Lkotlinx/coroutines/CompletableJob;", Native::Opaque)
 }
-pub(crate) fn coroutines_job_cancel_default(_vm: &mut Vm, _args: &[JValue]) -> R {
+pub(crate) fn coroutines_job_cancel_default(vm: &mut Vm, args: &[JValue]) -> R {
+    if let Some(JValue::Obj(id)) = args.first().copied() {
+        vm.job_states.insert(id, crate::vm::JobState::Cancelled);
+        vm.pending_jobs.retain(|j| j.job_obj != id);
+    }
     Ok(JValue::Null)
 }
 pub(crate) fn coroutines_is_active(_vm: &mut Vm, _args: &[JValue]) -> R {
@@ -154,6 +358,7 @@ pub(crate) fn coroutines_get_immediate(_vm: &mut Vm, args: &[JValue]) -> R {
 }
 pub(crate) fn coroutines_supervisor_scope(vm: &mut Vm, args: &[JValue]) -> R {
     let scope = alloc(vm, "Lkotlinx/coroutines/CoroutineScope;", Native::Opaque)?;
+    vm.structured_scopes.insert(scope.as_obj());
     inv_virt(
         vm,
         args[0],
@@ -164,6 +369,7 @@ pub(crate) fn coroutines_supervisor_scope(vm: &mut Vm, args: &[JValue]) -> R {
 }
 pub(crate) fn coroutines_scope(vm: &mut Vm, args: &[JValue]) -> R {
     let scope = alloc(vm, "Lkotlinx/coroutines/CoroutineScope;", Native::Opaque)?;
+    vm.structured_scopes.insert(scope.as_obj());
     inv_virt(
         vm,
         args[0],
@@ -174,6 +380,7 @@ pub(crate) fn coroutines_scope(vm: &mut Vm, args: &[JValue]) -> R {
 }
 pub(crate) fn coroutines_with_context(vm: &mut Vm, args: &[JValue]) -> R {
     let scope = alloc(vm, "Lkotlinx/coroutines/CoroutineScope;", Native::Opaque)?;
+    vm.structured_scopes.insert(scope.as_obj());
     inv_virt(
         vm,
         args[1],
@@ -272,6 +479,18 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/coroutines/SupervisorKt;", "SupervisorJob$default", "(Lkotlinx/coroutines/Job;ILjava/lang/Object;)Lkotlinx/coroutines/CompletableJob;", false, coroutines_supervisor_job_default),
     ne!("Lkotlinx/coroutines/SupervisorKt;", "supervisorScope", "(Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", false, coroutines_supervisor_scope),
     ne!("Lkotlinx/coroutines/Job;", "cancel$default", "(Lkotlinx/coroutines/Job;Ljava/util/concurrent/CancellationException;ILjava/lang/Object;)V", false, coroutines_job_cancel_default),
+    ne!("Lkotlinx/coroutines/Job;", "cancel", "()V", true, coroutines_job_cancel_default),
+    ne!("Lkotlinx/coroutines/Job;", "cancel", "(Ljava/util/concurrent/CancellationException;)V", true, coroutines_job_cancel_default),
+    ne!("Lkotlinx/coroutines/Job;", "isActive", "()Z", true, job_is_active),
+    ne!("Lkotlinx/coroutines/Job;", "isCompleted", "()Z", true, job_is_completed),
+    ne!("Lkotlinx/coroutines/Job;", "isCancelled", "()Z", true, job_is_cancelled),
+    ne!("Lkotlinx/coroutines/Job;", "join", "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", true, job_join),
+    ne!("Lkotlinx/coroutines/CompletableJob;", "cancel", "()V", true, coroutines_job_cancel_default),
+    ne!("Lkotlinx/coroutines/CompletableJob;", "cancel", "(Ljava/util/concurrent/CancellationException;)V", true, coroutines_job_cancel_default),
+    ne!("Lkotlinx/coroutines/CompletableJob;", "isActive", "()Z", true, job_is_active),
+    ne!("Lkotlinx/coroutines/CompletableJob;", "isCompleted", "()Z", true, job_is_completed),
+    ne!("Lkotlinx/coroutines/CompletableJob;", "isCancelled", "()Z", true, job_is_cancelled),
+    ne!("Lkotlinx/coroutines/CompletableJob;", "join", "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", true, job_join),
     ne!("Lkotlinx/coroutines/CoroutineScopeKt;", "cancel$default", "(Lkotlinx/coroutines/CoroutineScope;Ljava/util/concurrent/CancellationException;ILjava/lang/Object;)V", false, coroutines_job_cancel_default),
     ne!("Lkotlinx/coroutines/CoroutineScopeKt;", "cancel$default", "(Lkotlinx/coroutines/CoroutineScope;Ljava/lang/Throwable;ILjava/lang/Object;)V", false, coroutines_job_cancel_default),
     ne!("Lkotlinx/coroutines/CoroutineScopeKt;", "isActive", "(Lkotlinx/coroutines/CoroutineScope;)Z", false, coroutines_is_active),

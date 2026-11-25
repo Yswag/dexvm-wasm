@@ -174,7 +174,8 @@ pub(super) fn mathkt_round_to_long_double(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Long(double_of(vm, args[0]).round() as i64))
 }
 pub(super) fn coroutines_suspended(vm: &mut Vm, _args: &[JValue]) -> R {
-    Ok(opaque_inst(vm, "Ljava/lang/Object;"))
+    // wasm: return a consistent singleton token so `=== COROUTINE_SUSPENDED` works.
+    Ok(vm.coroutine_suspended_token())
 }
 
 pub(super) fn comparisons_compare_values(vm: &mut Vm, args: &[JValue]) -> R {

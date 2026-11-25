@@ -13,6 +13,7 @@ Update this table on every release. "Passing" means
 | 2026-11-25 | v0.2.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; 1.6 gate **17/22** full flow (+**manhuagui v1.6.2** via `HttpSource.getHeaders()` → `headersBuilder()` / `configureHeaders()`, `AppInfo.INSTANCE`, and optional `open.defaultUserAgent`); 6/6 offline header unit tests pass |
 | 2026-11-25 | v0.2.2 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; 1.6 gate **17/22** full flow; optional host `sleep(ms)` in `dexvm-host.js`, timed wait shims (`Object.wait`, `Condition.awaitNanos`/`await`, `CountDownLatch.await`) routed via WASI `poll_oneoff`, `DurationUnit` fix; 11/11 unit tests pass |
 | 2026-11-26 | v0.2.3 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; 1.6 gate **17/22** full flow; single-request 1.6 `details`/`chapters` + combined `mangaUpdate` op, non-blocking `GlobalScope.launch` + `DelayKt.delay` → host `sleep`, `StringsKt.lineSequence`/`Sequence.iterator`, `MatchResult.getDestructured`, `BooleanSerializer` boxing, `JsonNull.INSTANCE`; 17/17 unit tests pass |
+| 2026-11-26 | v0.2.4 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; detached `GlobalScope.launch`/`CoroutineScope(...).launch` queued per VM instance and drained via `runPending` op with true `COROUTINE_SUSPENDED` `delay()` suspension (`nextDueMs`), `Job.isActive`/`isCompleted`/`cancel`/`join`, and exception isolation; 21/21 unit tests pass |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
@@ -412,6 +413,36 @@ locks in these behaviors without requiring an external APK.
    `ClassCastException` on nullable `Boolean?` DTO fields (e.g. **XCOMIC v1.6.11**).
 * **Offline repro tests**: `test/v023.test.mjs` covers all 5 fixes (6/6 passing;
   17/17 total unit tests).
+
+### Background coroutine jobs & `runPending` (2026-11-26, v0.2.4)
+
+* **Detached vs. structured concurrency**:
+  * Detached launches (`GlobalScope.launch`, `CoroutineScope(...).launch`) are
+    enqueued on the VM instance's pending queue rather than dropped or run
+    synchronously during the main op. Because they execute later in the **same
+    VM instance**, they share the cookie jar, `SharedPreferences`, and source
+    instance fields just like `Dispatchers.IO` on Android.
+  * Structured concurrency (`coroutineScope { launch {} }`, `supervisorScope`,
+    `withContext`, `async`/`await`) continues to run inline.
+* **`Job` lifecycle**: returned `Job` handles reflect `isActive` / `isCompleted`
+  / `isCancelled`. Calling `cancel()` removes unstarted or suspended jobs from
+  the pending queue; calling `join()` inside a main op runs the job inline to
+  completion immediately.
+* **`runPending` op & true `delay()` suspension**:
+  * `call('runPending', { handle, maxJobs? })` returns
+    `{ ran, remaining, nextDueMs? }`, running up to `maxJobs` currently due jobs
+    (at least one when due).
+  * Inside `runPending`, `DelayKt.delay(ms, cont)` returns a singleton
+    `COROUTINE_SUSPENDED` token and stores the continuation + due timestamp
+    (`BaseContinuationImpl` completion links are tracked across
+    `SuspendLambda`/`ContinuationImpl`), allowing the worker to yield without
+    blocking and resume from the continuation after `nextDueMs`.
+  * Uncaught exceptions inside pending jobs are caught, logged via `host.log`,
+    and never trap the VM instance or affect subsequent ops.
+* **Tests**: `test/pending.test.mjs` covers (a) `manhuagui` v1.6.2 `mangaUpdate`
+  + `runPending` true `delay(1000)` suspension → both ajax calls, (b) throwing
+  job isolation, (c) `Job.join()` inline execution, and (d) `Job.cancel()`
+  removal (4/4 passing; 21/21 total unit tests).
 
 ### Inverse gap scan (2026-11-12)
 

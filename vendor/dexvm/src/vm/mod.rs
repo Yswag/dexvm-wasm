@@ -123,6 +123,24 @@ pub struct FieldRef {
 /// value. Receives the preference key and its new value.
 pub type SettingsUpdateCallback = std::rc::Rc<dyn Fn(&str, &PreferenceValue)>;
 
+// wasm: detached coroutine job lifecycle + pending queue entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JobState {
+    Pending,
+    Running,
+    Completed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingJob {
+    pub job_obj: u32,
+    pub scope: JValue,
+    pub block: JValue,
+    pub continuation: Option<JValue>,
+    pub due_at_ms: u64,
+}
+
 pub struct Vm {
     /// All dex files of the loaded program. Ids in dex tables (strings,
     /// types, methods, fields) are relative to the file that defines the
@@ -176,6 +194,16 @@ pub struct Vm {
     // wasm:
     #[cfg(feature = "tachiyomi")]
     pub default_user_agent: Option<String>,
+    // wasm: coroutine runtime state (singleton COROUTINE_SUSPENDED, detached
+    // pending job queue, Job lifecycle states, structured scope tracking, and
+    // BaseContinuationImpl completion links for real delay() suspension).
+    pub coroutine_suspended: Option<JValue>,
+    pub structured_scopes: std::collections::HashSet<u32>,
+    pub pending_jobs: Vec<PendingJob>,
+    pub job_states: HashMap<u32, JobState>,
+    pub continuation_completions: HashMap<u32, JValue>,
+    pub running_pending_job: bool,
+    pub pending_suspend: Option<(JValue, u64)>,
     /// Real host directory backing `Context.getCacheDir()` (created on first
     /// use so extension cache logic runs against a genuine filesystem).
     pub cache_root: Option<String>,
@@ -256,6 +284,13 @@ impl Vm {
             // wasm:
             #[cfg(feature = "tachiyomi")]
             default_user_agent: None,
+            coroutine_suspended: None,
+            structured_scopes: std::collections::HashSet::new(),
+            pending_jobs: Vec::new(),
+            job_states: HashMap::new(),
+            continuation_completions: HashMap::new(),
+            running_pending_job: false,
+            pending_suspend: None,
             host_natives: Vec::new(),
             perms: crate::permission::Permissions::new(),
         };
@@ -280,6 +315,36 @@ impl Vm {
         vm.ensure_class_by_desc_id(vm.hot.object)?;
         vm.register_natives();
         Ok(vm)
+    }
+
+    // wasm: monotonic millisecond clock shared by delay() suspension and runPending.
+    pub fn monotonic_ms() -> u64 {
+        static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        u64::try_from(
+            START
+                .get_or_init(std::time::Instant::now)
+                .elapsed()
+                .as_millis(),
+        )
+        .unwrap_or(u64::MAX)
+    }
+
+    // wasm: singleton COROUTINE_SUSPENDED token so `===` checks in SuspendLambda match.
+    pub fn coroutine_suspended_token(&mut self) -> JValue {
+        if let Some(tok) = self.coroutine_suspended {
+            return tok;
+        }
+        let cid = self.hot.object;
+        let id = self
+            .arena
+            .alloc(cid, Vec::new(), Some(crate::vm::object::Native::Opaque));
+        let tok = JValue::Obj(id);
+        self.coroutine_suspended = Some(tok);
+        tok
+    }
+
+    pub fn is_coroutine_suspended(&self, v: JValue) -> bool {
+        matches!((self.coroutine_suspended, v), (Some(JValue::Obj(a)), JValue::Obj(b)) if a == b)
     }
 
     // ---- interning ----

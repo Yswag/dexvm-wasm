@@ -157,6 +157,12 @@ impl Keiyoushi {
         self.ctx.set_default_user_agent(ua);
     }
 
+    // wasm: execute currently-due detached coroutine jobs queued by GlobalScope.launch /
+    // CoroutineScope(...).launch. Returns `(ran, remaining, next_due_ms)`.
+    pub fn run_pending(&mut self, max_jobs: Option<usize>) -> (usize, usize, Option<u64>) {
+        crate::vm::native::kotlinx::coroutines::run_pending_jobs(self.ctx.vm(), max_jobs)
+    }
+
     /// Selects the host-owned file used to persist Android
     /// `SharedPreferences`. Without this, preferences remain in memory only.
     pub fn set_shared_preferences_path(&mut self, path: impl AsRef<std::path::Path>) {

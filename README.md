@@ -70,7 +70,7 @@ runtime, the hash is only a one-time supply-chain check.
 
 ```
 scripts/build.sh             # cargo build + wasm-opt -Oz + sha256
-scripts/release.sh v0.2.3    # same, plus dist/SHA256SUMS and BUILDINFO
+scripts/release.sh v0.2.4    # same, plus dist/SHA256SUMS and BUILDINFO
 node test/run.mjs fixtures   # corpus gate
 ```
 
@@ -142,6 +142,7 @@ Other `fd_*` return `EBADF`; `path_*` return `ENOSYS`.
 | `preferences` | `sourceId` | `SettingsNode[]` |
 | `setPreference` | `sourceId`, `key`, `value` | `{ file, key }` |
 | `exportPrefs` | — | `{ "<prefs file>": { key: value } }` |
+| `runPending` | `maxJobs?` | `{ ran, remaining, nextDueMs? }` |
 | `cookies` | `set?`, `import?`, `get?`, `clear?` | `{ cookies }` or `{ cookie }` |
 | `close` | — | `null` |
 
@@ -177,6 +178,13 @@ untouched and the last response's `content-type`.
 `mangaUpdate` fetches both details and chapters in a single `getMangaUpdate`
 call on ext-lib 1.6 sources (falling back to `details` + `chapters` on legacy
 sources). `fetchDetails` and `fetchChapters` both default to `true`.
+
+`runPending` drains detached background coroutines queued by
+`GlobalScope.launch` or `CoroutineScope(...).launch` in the same VM instance
+(sharing cookies, `SharedPreferences`, and source fields). Jobs hitting
+`delay()` suspend cleanly via `COROUTINE_SUSPENDED` and report `nextDueMs` so
+the host can reschedule `runPending` without blocking the worker; uncaught
+exceptions inside a job are logged via `host.log` and do not trap the instance.
 
 `open`'s `prefs` uses the same shape as `exportPrefs` and is seeded before the
 extension reads it: `{ "source_3973269831131863421": { "website_password": "…" } }`.
@@ -217,7 +225,7 @@ serializers), `okio.Buffer$UnsafeCursor` + `ForwardingSource` draining,
 `HttpSource.getHeaders()`/`headersBuilder()`/`configureHeaders()` +
 `UserAgentInterceptor` + `AppInfo.INSTANCE`,
 timed `Object.wait`/`Condition.await`/`CountDownLatch.await`/`DelayKt.delay` → WASI `poll_oneoff`,
-non-blocking `GlobalScope.launch` (detached fire-and-forget jobs dropped),
+queued detached `GlobalScope.launch`/`CoroutineScope(...).launch` with true `COROUTINE_SUSPENDED` `delay()` suspension (`runPending` op, `Job.isActive`/`isCompleted`/`cancel`/`join`),
 `StringsKt.lineSequence`/`Sequence.iterator`, `MatchResult.getDestructured`/`Destructured.component1..10`,
 `BooleanSerializer` `java.lang.Boolean` boxing, `JsonNull.INSTANCE`,
 `kotlin.time.DurationUnit` enum variants,

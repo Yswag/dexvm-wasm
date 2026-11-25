@@ -93,6 +93,26 @@ fn intrinsics_compare(_vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Int(args[0].as_int().cmp(&args[1].as_int()) as i32))
 }
 
+// wasm: record parent completion on SuspendLambda / ContinuationImpl so resumed
+// continuations can walk up the completion chain after delay() suspension.
+fn suspend_lambda_init(vm: &mut Vm, args: &[JValue]) -> R {
+    if let (Some(JValue::Obj(this_id)), Some(comp)) = (args.first(), args.get(2)) {
+        if !comp.is_null_ref() {
+            vm.continuation_completions.insert(*this_id, *comp);
+        }
+    }
+    Ok(JValue::Null)
+}
+
+fn continuation_impl_init(vm: &mut Vm, args: &[JValue]) -> R {
+    if let (Some(JValue::Obj(this_id)), Some(comp)) = (args.first(), args.get(1)) {
+        if !comp.is_null_ref() {
+            vm.continuation_completions.insert(*this_id, *comp);
+        }
+    }
+    Ok(JValue::Null)
+}
+
 pub(crate) const TABLE: &[NativeEntry] = &[
     ne!(
         "Lkotlin/jvm/internal/SpreadBuilder;",
@@ -134,14 +154,14 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "<init>",
         "(ILkotlin/coroutines/Continuation;)V",
         true,
-        ctor_noop
+        suspend_lambda_init
     ),
     ne!(
         "Lkotlin/coroutines/jvm/internal/ContinuationImpl;",
         "<init>",
         "(Lkotlin/coroutines/Continuation;)V",
         true,
-        ctor_noop
+        continuation_impl_init
     ),
     ne!(
         "Lkotlin/coroutines/jvm/internal/SpillingKt;",
