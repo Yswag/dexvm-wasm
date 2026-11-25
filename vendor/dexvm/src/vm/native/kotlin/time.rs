@@ -1,15 +1,28 @@
 //! Kotlin time value classes and instant helpers.
 use crate::vm::native::*;
 
-fn unit_millis(vm: &mut Vm, v: JValue) -> Result<i64, NatErr> {
-    if v.is_null_ref() {
-        return Ok(1000);
+// wasm: honor actual DurationUnit variants instead of treating every unit as 1000ms.
+fn convert_to_millis(vm: &mut Vm, value: i64, unit: JValue) -> Result<i64, NatErr> {
+    if unit.is_null_ref() {
+        return Ok(value.saturating_mul(1000));
     }
-    let desc = vm.class_desc_str(obj_class(vm, v.as_obj()));
+    if let Some(Native::Enum { name, .. }) = payload(vm, unit) {
+        return Ok(match name.as_str() {
+            "NANOSECONDS" => value / 1_000_000,
+            "MICROSECONDS" => value / 1_000,
+            "MILLISECONDS" => value,
+            "SECONDS" => value.saturating_mul(1_000),
+            "MINUTES" => value.saturating_mul(60_000),
+            "HOURS" => value.saturating_mul(3_600_000),
+            "DAYS" => value.saturating_mul(86_400_000),
+            _ => value.saturating_mul(1_000),
+        });
+    }
+    let desc = vm.class_desc_str(obj_class(vm, unit.as_obj()));
     Ok(if desc.starts_with("Lkotlin/time/DurationUnit;") {
-        1000
+        value.saturating_mul(1000)
     } else {
-        1
+        value
     })
 }
 
@@ -17,14 +30,12 @@ pub(super) fn duration_get_zero(_vm: &mut Vm, _args: &[JValue]) -> R {
     Ok(JValue::Long(0))
 }
 pub(super) fn duration_to_duration_int(vm: &mut Vm, args: &[JValue]) -> R {
-    Ok(JValue::Long(
-        int_of(vm, args[0]) as i64 * unit_millis(vm, args[1])?,
-    ))
+    let val = int_of(vm, args[0]) as i64;
+    Ok(JValue::Long(convert_to_millis(vm, val, args[1])?))
 }
 pub(super) fn duration_to_duration_long(vm: &mut Vm, args: &[JValue]) -> R {
-    Ok(JValue::Long(
-        long_of(vm, args[0]) * unit_millis(vm, args[1])?,
-    ))
+    let val = long_of(vm, args[0]);
+    Ok(JValue::Long(convert_to_millis(vm, val, args[1])?))
 }
 
 pub(super) fn kotlin_instant_to_epoch_millis(vm: &mut Vm, args: &[JValue]) -> R {

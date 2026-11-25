@@ -11,6 +11,7 @@ Update this table on every release. "Passing" means
 | 2026-11-12 | v0.2.0-beta.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + 97 zh sweep | 14/14 open; 1.6 gate 5/11 full flow (dm5, Komiic, manhuagui, kaobeimanhua, CuuTruyen); zh full-flow 45/97; EN spot check 0/12 but MangaDex reaches pages |
 | 2026-11-25 | v0.2.0 | 0.2.0 + patch | 1.6.1–1.6.72 | 24 fixtures (`test/fixtures/`, 21 ext-lib 1.6) | 24/24 open; 1.6 gate **16/21** full flow (+Weeb Central, MangaDex, MangaFire, Mangahere, Kun Manga Online, Mangakakalot, **MANGA Plus by SHUEISHA**, **Shonen Jump+**, **Webtoons.com**, **MangaBuddy/MangaK**, **Rawkuma**); all 5 remaining failures are site-side (403/522/UA), zero VM errors |
 | 2026-11-25 | v0.2.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; 1.6 gate **17/22** full flow (+**manhuagui v1.6.2** via `HttpSource.getHeaders()` → `headersBuilder()` / `configureHeaders()`, `AppInfo.INSTANCE`, and optional `open.defaultUserAgent`); 6/6 offline header unit tests pass |
+| 2026-11-25 | v0.2.2 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; 1.6 gate **17/22** full flow; optional host `sleep(ms)` in `dexvm-host.js`, timed wait shims (`Object.wait`, `Condition.awaitNanos`/`await`, `CountDownLatch.await`) routed via WASI `poll_oneoff`, `DurationUnit` fix; 11/11 unit tests pass |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
@@ -353,6 +354,38 @@ locks in these behaviors without requiring an external APK.
 * **Offline unit test**: `test/headers.test.mjs` (`node --test test/headers.test.mjs`)
   verifies the SHA-256 pin, `configureHeaders()` propagation, `defaultUserAgent`
   precedence, classic `HttpSource` default behavior, and MangaDex's non-browser UA.
+
+### Host synchronous `sleep(ms)` & timed wait shims (2026-11-25, v0.2.2)
+
+* **`createDexvm({ sleep })` in `dexvm-host.js`**: optional synchronous
+  `sleep(ms)` callback replaces busy-waiting in WASI `poll_oneoff` with a
+  60 s safety cap (truncating and warning above 60 s). Supports multiple clock
+  subscriptions (earliest deadline wins), both relative and `ABSTIME` flags,
+  and a monotonic clock floor so `clock_time_get` never reads earlier than a
+  scheduled `poll_oneoff` wakeup. Omitting `sleep` preserves the existing 2 s
+  busy-wait behavior.
+* **Timed wait shims routed through `std::thread::sleep` (→ WASI `poll_oneoff`)**:
+  `Condition.awaitNanos(J)J`, `Condition.await(J, TimeUnit)Z`,
+  `Object.wait(J)V`/`wait(JI)V`, and `CountDownLatch.await(J, TimeUnit)Z`
+  (alongside existing `Thread.sleep`).
+* **`kotlin.time.DurationUnit` enum variants**: fixed `DurationUnit` singletons
+  so `MILLISECONDS` (1 ms), `SECONDS` (1,000 ms), `MINUTES` (60,000 ms),
+  `HOURS` (3,600,000 ms), and `DAYS` (86,400,000 ms) no longer all scale by
+  1,000 ms (which previously caused `RateLimitInterceptor`'s 10 s sliding
+  window to expire in 10 ms).
+* **Rate-limiting limitation without `sleep`**: both keiyoushi's
+  `RateLimitInterceptor` (`core/src/main/kotlin/keiyoushi/network/RateLimit.kt`)
+  and Mihon's legacy `RateLimitInterceptor`
+  (`core/common/src/main/kotlin/eu/kanade/tachiyomi/network/interceptor/RateLimitInterceptor.kt`)
+  loop and re-check `SystemClock.elapsedRealtime()` after waking, so a 2 s cap
+  does not dispatch rate-limited requests early — however, extensions that call
+  a one-shot `Thread.sleep(>2s)` without re-checking the clock will wake early
+  (and busy-waiting burns 100% of one CPU core) when `sleep` is omitted.
+* **Unit tests**: `test/sleep.test.mjs` verifies `Thread.sleep(3000)` with and
+  without host `sleep`, the 60 s safety cap, multi-subscription `poll_oneoff` +
+  `ABSTIME` + `clock_time_get` consistency, and `manhuagui` v1.6.2 15-call
+  rate limiting (10 req / 10 s). `test/run.mjs` now supplies an `Atomics.wait`
+  `sleep` implementation in Node.
 
 ### Inverse gap scan (2026-11-12)
 

@@ -152,10 +152,16 @@ function syncHttp(reqJson) {
 const enc = (b) => Buffer.from(b).toString('base64');
 const ms = (t0) => Math.round((performance.now() - t0) * 10) / 10;
 
+const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
+function syncSleep(ms) {
+  if (ms > 0) Atomics.wait(sleepBuf, 0, 0, ms);
+}
+
 async function newVm() {
   return createDexvm({
     wasmBytes: fs.readFileSync(WASM),
     http: syncHttp,
+    sleep: syncSleep,
     log: (lvl, msg) => {
       if (process.env.DEXVM_LOG && lvl >= Number(process.env.DEXVM_LOG)) console.error(`[wasm] ${msg}`);
     },

@@ -34,7 +34,10 @@ pub(crate) use statics::{
     clock_system_instance as lazy_clock_system_instance,
     duration_companion as lazy_duration_companion, duration_unit_days as lazy_duration_unit_days,
     duration_unit_hours as lazy_duration_unit_hours,
+    duration_unit_micros as lazy_duration_unit_micros,
     duration_unit_millis as lazy_duration_unit_millis,
+    duration_unit_minutes as lazy_duration_unit_minutes,
+    duration_unit_nanos as lazy_duration_unit_nanos,
     duration_unit_seconds as lazy_duration_unit_seconds, global_scope as lazy_global_scope,
     result_companion as lazy_result_companion, unit_instance as lazy_unit_instance,
 };

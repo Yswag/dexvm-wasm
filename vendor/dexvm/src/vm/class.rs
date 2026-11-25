@@ -1769,12 +1769,12 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
             sdef!(
                 "NANOSECONDS",
                 "Lkotlin/time/DurationUnit;",
-                ShimValue::Lazy(native::lazy_duration_unit_millis)
+                ShimValue::Lazy(native::lazy_duration_unit_nanos)
             ),
             sdef!(
                 "MICROSECONDS",
                 "Lkotlin/time/DurationUnit;",
-                ShimValue::Lazy(native::lazy_duration_unit_millis)
+                ShimValue::Lazy(native::lazy_duration_unit_micros)
             ),
             sdef!(
                 "MILLISECONDS",
@@ -1789,7 +1789,7 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
             sdef!(
                 "MINUTES",
                 "Lkotlin/time/DurationUnit;",
-                ShimValue::Lazy(native::lazy_duration_unit_millis)
+                ShimValue::Lazy(native::lazy_duration_unit_minutes)
             ),
             sdef!(
                 "HOURS",

@@ -22,10 +22,24 @@ pub(crate) fn latch_get_count(vm: &mut Vm, args: &[JValue]) -> R {
     }
 }
 pub(crate) fn latch_await(vm: &mut Vm, args: &[JValue]) -> R {
-    match payload(vm, args[0]) {
-        Some(Native::CountDownLatch(n)) => Ok(JValue::Int(i32::from(*n == 0))),
-        _ => Err(npe(vm)),
+    let count = match payload(vm, args[0]) {
+        Some(Native::CountDownLatch(n)) => *n,
+        _ => return Err(npe(vm)),
+    };
+    if count == 0 {
+        return Ok(JValue::Int(1));
     }
+    // wasm: timed CountDownLatch.await(long, TimeUnit) sleeps via WASI poll_oneoff.
+    if args.len() >= 3 {
+        let timeout = long_of(vm, args[1]);
+        let dur = crate::vm::native::java::util::reentrant_lock::time_unit_duration(
+            vm, timeout, args[2],
+        );
+        if !dur.is_zero() {
+            std::thread::sleep(dur);
+        }
+    }
+    Ok(JValue::Int(0))
 }
 
 pub(crate) fn semaphore_init(vm: &mut Vm, args: &[JValue]) -> R {

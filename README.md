@@ -28,6 +28,8 @@ const vm = await createDexvm({
   wasmBytes: await (await fetch('./vendor/dexvm_bridge.wasm')).arrayBuffer(),
   http: (reqJson) => proxySync(reqJson), // synchronous, returns JSON
   log: (level, msg) => {},              // optional
+  evalJs: (src) => evalSync(src),       // optional, for app.cash.quickjs
+  sleep: (ms) => sleepSync(ms),         // optional synchronous sleep (replaces busy-wait)
 });
 
 const { handle, manifest } = vm.call('open', { apkBase64 });
@@ -68,7 +70,7 @@ runtime, the hash is only a one-time supply-chain check.
 
 ```
 scripts/build.sh             # cargo build + wasm-opt -Oz + sha256
-scripts/release.sh v0.2.1    # same, plus dist/SHA256SUMS and BUILDINFO
+scripts/release.sh v0.2.2    # same, plus dist/SHA256SUMS and BUILDINFO
 node test/run.mjs fixtures   # corpus gate
 ```
 
@@ -113,7 +115,12 @@ the message surfaces as `(network: …)` in the failing op's error.
 ### WASI subset
 
 `clock_time_get`, `random_get`, `fd_write`, `environ_*`, `args_*`, `sched_yield`,
-`proc_exit`, `poll_oneoff` (clock subscriptions only, busy wait capped at 2 s).
+`proc_exit`, `poll_oneoff` (clock subscriptions only, relative and `ABSTIME`,
+earliest-deadline selection across multiple subscriptions, and monotonic
+`clock_time_get` consistency on wakeup). When `createDexvm({ sleep })` is
+provided, `poll_oneoff` delegates to the host's synchronous `sleep(ms)` instead
+of busy-waiting, with a 60 s safety cap (truncating and warning above 60 s).
+When `sleep` is omitted, `poll_oneoff` falls back to busy-waiting capped at 2 s.
 Other `fd_*` return `EBADF`; `path_*` return `ENOSYS`.
 
 ## Operations
@@ -204,6 +211,8 @@ serializers), `okio.Buffer$UnsafeCursor` + `ForwardingSource` draining,
 `kotlinx.coroutines.sync.Mutex` overloads, jsoup `[attr~=regex]`/`:contains`,
 `HttpSource.getHeaders()`/`headersBuilder()`/`configureHeaders()` +
 `UserAgentInterceptor` + `AppInfo.INSTANCE`,
+timed `Object.wait`/`Condition.await`/`CountDownLatch.await` → WASI `poll_oneoff` +
+`kotlin.time.DurationUnit` enum variants,
 and `java.time`/`DecimalFormat`/`Map.computeIfAbsent` shims.
 
 The bridge (`dexvm-bridge/src/shims.rs` & `engine.rs`) fills host gaps that the

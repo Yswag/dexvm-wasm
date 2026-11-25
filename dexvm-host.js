@@ -9,6 +9,7 @@
 //                                      //   -> {status,headers,bodyBase64,finalUrl} | {error}
 //     log: (level, msg) => {},         // optional
 //     evalJs: (src) => jsonString,     // optional, for app.cash.quickjs
+//     sleep: (ms) => {},               // optional SYNC sleep (replaces busy-wait in poll_oneoff)
 //   });
 //   const value = vm.call('open', { apkBase64 });   // throws DexvmError on ok:false
 
@@ -22,6 +23,7 @@ const ERRNO = {
 };
 
 const POLL_CAP_MS = 2000;
+const SLEEP_CAP_MS = 60_000;
 
 export class DexvmError extends Error {
   constructor(err) {
@@ -42,7 +44,7 @@ function decoder() {
   return _decoder;
 }
 
-export async function createDexvm({ wasmBytes, http, log, evalJs } = {}) {
+export async function createDexvm({ wasmBytes, http, log, evalJs, sleep } = {}) {
   if (!wasmBytes) throw new Error('createDexvm: wasmBytes is required');
   let instance = null;
   let cryptoObj = globalThis.crypto;
@@ -80,10 +82,18 @@ export async function createDexvm({ wasmBytes, http, log, evalJs } = {}) {
     return code;
   }
 
+  let clockFloorNs = 0n;
+  function currentClockNs() {
+    const wall = BigInt(Date.now()) * 1000000n;
+    if (wall > clockFloorNs) clockFloorNs = wall;
+    return clockFloorNs;
+  }
+
   const wasi = {
     clock_time_get(_id, _precision, out) {
-      // Date.now() has ms resolution; ns precision is good enough for the VM.
-      dv().setBigUint64(out, BigInt(Date.now()) * 1000000n, true);
+      // Date.now() has ms resolution; monotonic floor keeps clock_time_get
+      // consistent with poll_oneoff wakeups.
+      dv().setBigUint64(out, currentClockNs(), true);
       return 0;
     },
     random_get(ptr, len) {
@@ -137,50 +147,97 @@ export async function createDexvm({ wasmBytes, http, log, evalJs } = {}) {
     sched_yield() {
       return 0;
     },
-    // Only single absolute/relative clock subscriptions are supported.
-    // No Atomics.wait in a worker without SharedArrayBuffer => busy wait,
-    // capped at POLL_CAP_MS.
+    // Clock subscriptions only. When `sleep` is provided, blocks via host
+    // `sleep(ms)` (capped at SLEEP_CAP_MS); otherwise falls back to busy-wait
+    // capped at POLL_CAP_MS (for workers without SharedArrayBuffer).
     poll_oneoff(inPtr, outPtr, nsubs, neventsPtr) {
       const view = dv();
-      let written = 0;
+      const nowNs = currentClockNs();
+      const immediate = [];
+      const clocks = [];
       for (let i = 0; i < nsubs; i++) {
         const sub = inPtr + i * 48;
         const userdata = view.getBigUint64(sub, true);
         const type = view.getUint8(sub + 8);
-        const ev = outPtr + written * 32;
-        view.setBigUint64(ev, userdata, true);
         if (type === 0) {
           const clockId = view.getUint32(sub + 16, true);
           const timeout = view.getBigUint64(sub + 24, true); // ns
           const flags = view.getUint16(sub + 40, true);
-          const nowNs = BigInt(Date.now()) * 1000000n;
-          let target = flags & 1 ? timeout : nowNs + timeout;
-          // subscriptions with id 0 (realtime) or 1 (monotonic) both use Date.now here
+          // subscriptions with id 0 (realtime) or 1 (monotonic) both use currentClockNs
           if (clockId > 1) {
-            view.setUint16(ev + 8, ERRNO.INVAL, true);
-            view.setUint8(ev + 10, 2);
-            written++;
+            immediate.push({ userdata, error: ERRNO.INVAL, type: 2 });
             continue;
           }
-          const capNs = BigInt(POLL_CAP_MS) * 1000000n;
-          if (target - nowNs > capNs) {
-            warn('poll_oneoff clock wait truncated to ' + POLL_CAP_MS + 'ms (was ' +
-              Number((target - nowNs) / 1000000n) + 'ms)');
-            target = nowNs + capNs;
-          }
-          // busy wait; Date.now() may not advance fast enough on some hosts,
-          // so also bound the loop by iterations.
-          let guard = 0;
-          while (Date.now() < Number(target / 1000000n) && guard++ < 4_000_000) {}
-          view.setUint16(ev + 8, 0, true);
-          view.setUint8(ev + 10, 0);
+          const targetNs = flags & 1 ? timeout : nowNs + timeout;
+          clocks.push({ userdata, targetNs });
         } else {
-          view.setUint16(ev + 8, ERRNO.NOSYS, true);
-          view.setUint8(ev + 10, type);
+          immediate.push({ userdata, error: ERRNO.NOSYS, type });
         }
-        written++;
       }
-      view.setUint32(neventsPtr, written, true);
+
+      const ready = [...immediate];
+      if (clocks.length > 0) {
+        let earliestTargetNs = clocks[0].targetNs;
+        for (let i = 1; i < clocks.length; i++) {
+          if (clocks[i].targetNs < earliestTargetNs) earliestTargetNs = clocks[i].targetNs;
+        }
+        if (ready.length > 0) {
+          // Non-clock error events are ready immediately; also report any
+          // already-expired clock subscriptions without blocking.
+          for (const c of clocks) {
+            if (c.targetNs <= nowNs) ready.push({ userdata: c.userdata, error: 0, type: 0 });
+          }
+        } else {
+          let waitNs = earliestTargetNs > nowNs ? earliestTargetNs - nowNs : 0n;
+          let effectiveTargetNs = earliestTargetNs;
+          const hasSleep = typeof sleep === 'function';
+          if (waitNs > 0n) {
+            const capMs = hasSleep ? SLEEP_CAP_MS : POLL_CAP_MS;
+            const capNs = BigInt(capMs) * 1000000n;
+            if (waitNs > capNs) {
+              warn('poll_oneoff clock wait truncated to ' + capMs + 'ms (was ' +
+                Number(waitNs / 1000000n) + 'ms)');
+              waitNs = capNs;
+              effectiveTargetNs = nowNs + capNs;
+            }
+            if (hasSleep) {
+              sleep(Math.ceil(Number(waitNs) / 1e6));
+              if (effectiveTargetNs > clockFloorNs) clockFloorNs = effectiveTargetNs;
+            } else {
+              // busy wait; Date.now() may not advance fast enough on some hosts,
+              // so also bound the loop by iterations.
+              const targetMs = Number(effectiveTargetNs / 1000000n);
+              let guard = 0;
+              while (Date.now() < targetMs && guard++ < 4_000_000) {}
+              if (Date.now() >= targetMs && effectiveTargetNs > clockFloorNs) {
+                clockFloorNs = effectiveTargetNs;
+              }
+            }
+          }
+          const afterNs = currentClockNs();
+          for (const c of clocks) {
+            if (c.targetNs <= afterNs) ready.push({ userdata: c.userdata, error: 0, type: 0 });
+          }
+          // When truncated (effectiveTargetNs < earliestTargetNs), report the
+          // earliest clock subscription(s) so poll_oneoff returns nevents >= 1.
+          if (ready.length === 0) {
+            for (const c of clocks) {
+              if (c.targetNs === earliestTargetNs) {
+                ready.push({ userdata: c.userdata, error: 0, type: 0 });
+              }
+            }
+          }
+        }
+      }
+
+      const outView = dv();
+      for (let i = 0; i < ready.length; i++) {
+        const ev = outPtr + i * 32;
+        outView.setBigUint64(ev, ready[i].userdata, true);
+        outView.setUint16(ev + 8, ready[i].error, true);
+        outView.setUint8(ev + 10, ready[i].type);
+      }
+      outView.setUint32(neventsPtr, ready.length, true);
       return 0;
     },
     fd_close: () => errno(ERRNO.BADF),

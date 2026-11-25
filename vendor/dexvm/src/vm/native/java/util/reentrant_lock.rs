@@ -69,8 +69,46 @@ pub(crate) fn reentrant_lock_is_held(_vm: &mut Vm, _args: &[JValue]) -> R {
     Ok(JValue::Int(0))
 }
 
-pub(crate) fn condition_await_nanos(_vm: &mut Vm, _args: &[JValue]) -> R {
+// wasm: convert (timeout, TimeUnit) to Duration for Condition.await and CountDownLatch.await.
+pub(crate) fn time_unit_duration(vm: &Vm, timeout: i64, unit: JValue) -> std::time::Duration {
+    if timeout <= 0 {
+        return std::time::Duration::ZERO;
+    }
+    let t = timeout as u64;
+    let name = match payload(vm, unit) {
+        Some(Native::Enum { name, .. }) => name.as_str(),
+        _ => "MILLISECONDS",
+    };
+    match name {
+        "NANOSECONDS" => std::time::Duration::from_nanos(t),
+        "MICROSECONDS" => std::time::Duration::from_micros(t),
+        "MILLISECONDS" => std::time::Duration::from_millis(t),
+        "SECONDS" => std::time::Duration::from_secs(t),
+        "MINUTES" => std::time::Duration::from_secs(t.saturating_mul(60)),
+        "HOURS" => std::time::Duration::from_secs(t.saturating_mul(3600)),
+        "DAYS" => std::time::Duration::from_secs(t.saturating_mul(86_400)),
+        _ => std::time::Duration::from_millis(t),
+    }
+}
+
+pub(crate) fn condition_await_nanos(vm: &mut Vm, args: &[JValue]) -> R {
+    // wasm: sleep via std::thread::sleep (-> WASI poll_oneoff) instead of spinning.
+    let nanos = long_of(vm, args[1]);
+    if nanos <= 0 {
+        return Ok(JValue::Long(nanos));
+    }
+    std::thread::sleep(std::time::Duration::from_nanos(nanos as u64));
     Ok(JValue::Long(0))
+}
+
+pub(crate) fn condition_await_timed(vm: &mut Vm, args: &[JValue]) -> R {
+    // wasm: timed Condition.await(long, TimeUnit) -> WASI poll_oneoff.
+    let timeout = long_of(vm, args[1]);
+    let dur = time_unit_duration(vm, timeout, args[2]);
+    if !dur.is_zero() {
+        std::thread::sleep(dur);
+    }
+    Ok(JValue::Int(0))
 }
 
 pub(crate) fn condition_await(_vm: &mut Vm, _args: &[JValue]) -> R {

@@ -65,6 +65,34 @@ pub(crate) fn object_clone(vm: &mut Vm, args: &[JValue]) -> R {
     }
 }
 
+// wasm: timed Object.wait delegates to std::thread::sleep (-> WASI poll_oneoff).
+pub(crate) fn object_wait_timed(vm: &mut Vm, args: &[JValue]) -> R {
+    let millis = match args.get(1) {
+        Some(JValue::Long(v)) => *v,
+        Some(JValue::Int(v)) => i64::from(*v),
+        _ => return Err(iae(vm, "invalid wait timeout")),
+    };
+    let nanos = match args.get(2) {
+        Some(JValue::Int(v)) => *v,
+        Some(_) => return Err(iae(vm, "invalid nanosecond value")),
+        None => 0,
+    };
+    if millis < 0 || !(0..=999_999).contains(&nanos) {
+        return Err(iae(vm, "invalid wait timeout"));
+    }
+    if millis > 0 || nanos > 0 {
+        std::thread::sleep(
+            std::time::Duration::from_millis(millis as u64)
+                + std::time::Duration::from_nanos(nanos as u64),
+        );
+    }
+    Ok(JValue::Null)
+}
+
+pub(crate) fn object_wait_noop(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Null)
+}
+
 /// Native methods for Ljava/lang/Object;
 pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Ljava/lang/Object;", "<init>", "()V", true, object_init),
@@ -103,6 +131,12 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         true,
         object_clone
     ),
+    // wasm: Object.wait / notify shims (timed wait sleeps via WASI poll_oneoff).
+    ne!("Ljava/lang/Object;", "wait", "()V", true, object_wait_noop),
+    ne!("Ljava/lang/Object;", "wait", "(J)V", true, object_wait_timed),
+    ne!("Ljava/lang/Object;", "wait", "(JI)V", true, object_wait_timed),
+    ne!("Ljava/lang/Object;", "notify", "()V", true, object_wait_noop),
+    ne!("Ljava/lang/Object;", "notifyAll", "()V", true, object_wait_noop),
     ne!(
         "Ljava/lang/ThreadLocal;",
         "get",
