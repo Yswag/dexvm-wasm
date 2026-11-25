@@ -18,7 +18,21 @@ pub(crate) fn output_stream_append(vm: &mut Vm, stream: JValue, bytes: &[u8]) ->
         match payload_mut(vm, stream) {
             Some(Native::ByteArrayOutputStream(output)) => output.extend_from_slice(bytes),
             Some(Native::OkioSink { bytes: output, .. }) => output.extend_from_slice(bytes),
-            _ => return Err(npe(vm)),
+            Some(Native::OkioBuf { bytes: output, .. }) => output.extend_from_slice(bytes),
+            _ => {
+                // wasm: diagnose unexpected OutputStream implementation (e.g. DEX subclass).
+                let cls = match stream {
+                    JValue::Obj(id) => vm
+                        .arena
+                        .objects
+                        .get(id as usize)
+                        .map(|o| vm.str_of(vm.classes[o.class as usize].descriptor).to_string())
+                        .unwrap_or_else(|| format!("invalid#{id}")),
+                    other => format!("{other:?}"),
+                };
+                log::warn!("output_stream_append: unsupported stream {cls}");
+                return Err(npe(vm));
+            }
         }
     }
     Ok(JValue::Null)

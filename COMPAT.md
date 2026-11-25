@@ -9,7 +9,7 @@ Update this table on every release. "Passing" means
 |---|---|---|---|---|---|
 | 2026-11-08 | v0.1.0 | 0.2.0 + patch | 1.4.x, 1.6.3–1.6.8 | `test/fixtures/` (5 APKs) | 5/5 open + sources; MangaPill 1.4.9 and Comic Fury 1.4.8 complete the full flow including images |
 | 2026-11-12 | v0.2.0-beta.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + 97 zh sweep | 14/14 open; 1.6 gate 5/11 full flow (dm5, Komiic, manhuagui, kaobeimanhua, CuuTruyen); zh full-flow 45/97; EN spot check 0/12 but MangaDex reaches pages |
-| 2026-11-25 | unreleased | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + EN 1.6 follow-up | 14/14 open; 1.6 gate **6/11** full flow (+Weeb Central); EN follow-up adds **MangaDex**, **MangaFire**, **Mangahere**, **Kun Manga Online**, and **Mangakakalot** end-to-end |
+| 2026-11-25 | unreleased | 0.2.0 + patch | 1.6.1–1.6.72 | 24 fixtures (`test/fixtures/`, 21 ext-lib 1.6) | 24/24 open; 1.6 gate **16/21** full flow (+Weeb Central, MangaDex, MangaFire, Mangahere, Kun Manga Online, Mangakakalot, **MANGA Plus by SHUEISHA**, **Shonen Jump+**, **Webtoons.com**, **MangaBuddy/MangaK**, **Rawkuma**); all 5 remaining failures are site-side (403/522/UA), zero VM errors |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
@@ -281,6 +281,49 @@ Five VM/bridge fixes targeting the remaining 1.6.x EN and cross-source gaps:
   `(ILjava/lang/Object;)Ljava/lang/Object;`. Fixes **Mangakakalot 1.6.30**
   `pages` — now passes end-to-end (24 mangas / 3,877 chapters / 96 pages /
   4.6 KB WebP).
+
+### Expanded 1.6.x corpus & multi-region sweep (2026-11-25)
+
+Added 10 newly passing 1.6.x APKs into `test/fixtures/` (24 total fixtures, 21
+on ext-lib 1.6; `node test/run.mjs fixtures` is **24/24 ok**, and
+`node test/run.mjs 1.6` is **16/21 full flow** with zero VM/bridge errors —
+the 5 remaining failures are 3× HTTP 403, 1× HTTP 522, and 1× `MangaPill`
+desktop-UA empty list):
+
+* **MANGA Plus by SHUEISHA 1.6.69 (all/en)** — ✅ 100 / 6 / 19, 457.7 KB
+  XOR-decrypted JPEG:
+  * Dalvik `shl-long`/`shr-long`/`ushr-long` now accept `Int` shift counts
+    (2nd operand) in `interpret.rs`.
+  * `kotlinx.serialization.descriptors` reflection (`SerialKind`, `StructureKind`,
+    `PrimitiveKind`, `PluginGeneratedSerialDescriptor.{getKind, getElementAnnotations,
+    getElementDescriptor, getElementIndex, isElementOptional, isNullable, isInline}`),
+    `AbstractDecoder` / `AbstractEncoder` defaults, `AbstractCollectionSerializer.merge`,
+    `ByteArraySerializer`, `SerializersModuleBuildersKt.EmptySerializersModule`,
+    `ProtoIntegerType` real `Native::Enum` constants + `values()`, and
+    `java.lang.annotation.Annotation`.
+  * `okio.BufferedSource` primitive reads (`readByte`, `readInt*`, `readLong*`,
+    `readUtf8(J)`, `skip`), `okio.Buffer$UnsafeCursor` (`readAndWriteUnsafe`,
+    `seek`, `next`, `close` with in-place writeback), and `Okio.buffer(Source)`
+    draining custom DEX `ForwardingSource.read` subclasses.
+* **Shonen Jump+ 1.6.3 (ja)** — ✅ 96 / 22 / 24, 1.76 MB Canvas-descrambled PNG:
+  * Fixed static arg indexing in `BitmapFactory.decodeStream` / `decodeByteArray`,
+    `Bitmap.compress` stream argument (`args[3]`, not `args[2]` quality), PNG
+    fallback encoding for non-PNG `CompressFormat` (instead of raw RGBA stub),
+    `Bitmap$Config` / `Bitmap$CompressFormat` enum descriptors, and `Rect.<init>`
+    attaching `Native::Rect` onto `new-instance` objects.
+* **Webtoons.com 1.6.5 (all/en)** — ✅ 30 / 5 / 114, 174 KB JPEG:
+  * Added `java.text.DecimalFormat.format(Ljava/lang/Object;)Ljava/lang/String;`.
+* **MangaBuddy / MangaK 1.6.40 (en)** — ✅ 24 / 269 / 34, 112.5 KB WebP:
+  * `JsonObject` implements `java.util.Map`, `JsonArray` implements `List` and
+    is handled by `coll_elems`, `JsonArray.<init>(List)` attaches `Native::Json`
+    onto `new-instance` objects, `PrimitiveSerializer` boxes primitives into
+    `Integer`/`Long`/`Float`/`Double` objects for `Number.*Value()`, and added
+    `java.util.function.*` + `Map.computeIfAbsent`.
+* **Rawkuma 1.6.44 (ja)** — ✅ 24 / 191 / 11, 108 KB WebP:
+  * Added `kotlinx.coroutines.sync.Mutex` `owner: Object?` overloads (`lock`,
+    `tryLock`, `unlock`).
+* **nHentai.com 1.6.3 (all: zh/en/ja)** — ✅ verified end-to-end across all 3
+  languages (18 mangas / 1 ch / 71–231 pg / 102–348 KB JPEG).
 
 Unit test `vm::tests::ext16_shims_null_ref_regex_escape_and_jsoup_attr_regex`
 locks in these behaviors without requiring an external APK.

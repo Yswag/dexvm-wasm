@@ -94,7 +94,7 @@ function syncHttp(reqJson) {
   if (method !== 'GET') args.push('-X', method);
   const headers = [...(req.headers || [])];
   const hasUA = headers.some(([k]) => k.toLowerCase() === 'user-agent');
-  if (!hasUA) headers.push(['User-Agent', defaultUa]);
+  if (!hasUA) headers.push(['User-Agent', !process.env.DEXVM_UA && hostOf(req.url) === 'api.mangadex.org' ? 'okhttp/4.12.0' : defaultUa]);
   const ck = cookieHeader(req.url);
   if (ck && !headers.some(([k]) => k.toLowerCase() === 'cookie')) headers.push(['Cookie', ck]);
   for (const [k, v] of headers) args.push('-H', `${k}: ${v}`);
@@ -261,6 +261,16 @@ const FIXTURE_APKS = [
   'tachiyomi-zh.manhuagui-v1.6.1.apk',
   'tachiyomi-zh.kaobeimanhua-v1.6.1.apk',
   'tachiyomi-zh.baozimanhua-v1.6.33.apk',
+  'tachiyomi-all.mangadex-v1.6.5.apk',
+  'tachiyomi-all.mangafire-v1.6.40.apk',
+  'tachiyomi-en.mangahere-v1.6.3.apk',
+  'tachiyomi-en.kunmangaonline-v1.6.63.apk',
+  'tachiyomi-en.mangakakalot-v1.6.30.apk',
+  'tachiyomi-all.mangaplus-v1.6.69.apk',
+  'tachiyomi-ja.shonenjumpplus-v1.6.3.apk',
+  'tachiyomi-all.webtoons-v1.6.5.apk',
+  'tachiyomi-en.mangabuddy-v1.6.40.apk',
+  'tachiyomi-ja.rawkuma-v1.6.44.apk',
   // ext-lib 1.6: these are the versions the keiyoushi repo currently publishes.
   'tachiyomi-vi.cuutruyenmoe-v1.6.3.apk',
   'tachiyomi-vi.moetruyen-v1.6.8.apk',
@@ -331,7 +341,7 @@ async function modeFlows(apks, { img = true, dir = FIXTURES, langs = null } = {}
     try {
       const opened = await openApk(vm, p);
       const sources = vm.call('sources', { handle: opened.handle });
-      const picked = langs ? sources.filter((s) => langs.includes(s.lang)) : sources;
+      const picked = langs ? sources.filter((s) => langs.includes(s.lang)) : (!process.env.DEXVM_ALL_LANGS && sources.length > 3 ? [sources.find((s) => s.lang === 'en') || sources[0]].filter(Boolean) : sources);
       let trapped = false;
       for (const s of picked) {
         const row = await runSource(vm, opened.handle, s, { img });

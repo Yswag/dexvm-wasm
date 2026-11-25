@@ -242,8 +242,12 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/coroutines/AwaitKt;", "awaitAll", "(Ljava/util/Collection;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", false, deferred_await_all),
     ne!("Lkotlinx/coroutines/sync/MutexKt;", "Mutex$default", "(ZILjava/lang/Object;)Lkotlinx/coroutines/sync/Mutex;", false, mutex_default),
     ne!("Lkotlinx/coroutines/sync/Mutex;", "lock", "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", true, mutex_lock),
+    // wasm: Kotlin Mutex.lock/tryLock/unlock take an optional `owner: Any?` parameter.
+    ne!("Lkotlinx/coroutines/sync/Mutex;", "lock", "(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", true, mutex_lock),
     ne!("Lkotlinx/coroutines/sync/Mutex;", "tryLock", "()Z", true, mutex_try_lock),
+    ne!("Lkotlinx/coroutines/sync/Mutex;", "tryLock", "(Ljava/lang/Object;)Z", true, mutex_try_lock),
     ne!("Lkotlinx/coroutines/sync/Mutex;", "unlock", "()V", true, mutex_unlock),
+    ne!("Lkotlinx/coroutines/sync/Mutex;", "unlock", "(Ljava/lang/Object;)V", true, mutex_unlock),
     ne!("Lkotlinx/coroutines/sync/Mutex;", "isLocked", "()Z", true, mutex_is_locked),
     ne!("Lkotlinx/coroutines/SupervisorKt;", "SupervisorJob$default", "(Lkotlinx/coroutines/Job;ILjava/lang/Object;)Lkotlinx/coroutines/CompletableJob;", false, coroutines_supervisor_job_default),
     ne!("Lkotlinx/coroutines/SupervisorKt;", "supervisorScope", "(Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", false, coroutines_supervisor_scope),

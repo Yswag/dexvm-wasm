@@ -80,6 +80,13 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ),
     ne!(
         "Ljava/util/LinkedHashMap;",
+        "computeIfAbsent",
+        "(Ljava/lang/Object;Ljava/util/function/Function;)Ljava/lang/Object;",
+        true,
+        map_compute_if_absent
+    ),
+    ne!(
+        "Ljava/util/LinkedHashMap;",
         "containsKey",
         "(Ljava/lang/Object;)Z",
         true,

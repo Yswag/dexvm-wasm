@@ -80,6 +80,15 @@ pub(crate) fn coll_elems(vm: &mut Vm, v: JValue) -> Result<Vec<JValue>, NatErr> 
                 Ok((*first..=*last).map(JValue::Long).collect())
             }
             Some(Native::Array(ArrayData::Obj(items))) => Ok(items.clone()),
+            // wasm: JsonArray implements List<JsonElement>.
+            #[cfg(feature = "tachiyomi")]
+            Some(Native::Json(crate::vm::object::JsonVal::Array(items))) => {
+                let items = items.clone();
+                items
+                    .iter()
+                    .map(|item| crate::vm::native::serialization::alloc_json_node(vm, item))
+                    .collect()
+            }
             #[cfg(feature = "jsoup")]
             Some(Native::JsoupElements { doc, ids }) => {
                 let doc = doc.clone();

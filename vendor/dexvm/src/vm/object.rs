@@ -771,6 +771,9 @@ pub enum Native {
         /// after `addElement`), used by the protobuf decoder to map wire
         /// field numbers (@ProtoNumber) back to descriptor indexes.
         element_annotations: Vec<Vec<JValue>>,
+        // wasm: SerialKind class descriptor & owning serializer for getKind/getElementDescriptor.
+        kind_desc: &'static str,
+        owner: JValue,
     },
     /// kotlinx.serialization JsonElement serializer marker.
     JsonElementSerializer,

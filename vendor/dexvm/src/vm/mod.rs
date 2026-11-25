@@ -2605,5 +2605,120 @@ mod tests {
         assert!(!memo.is_null_ref());
         let is_empty = vm.invoke_virtual(memo, "isEmpty", "()Z").unwrap();
         assert_eq!(is_empty.as_int(), 1);
+
+        // 9. JsonObject implements java.util.Map, and DecimalFormat.format(Object) works.
+        let map_cid = vm.ensure_class_by_desc("Ljava/util/Map;").unwrap();
+        let jo_cid = vm
+            .ensure_class_by_desc("Lkotlinx/serialization/json/JsonObject;")
+            .unwrap();
+        assert!(vm.is_assignable(jo_cid, map_cid).unwrap());
+
+        let df_cid = vm.ensure_class_by_desc("Ljava/text/DecimalFormat;").unwrap();
+        let df = JValue::Obj(vm.alloc_instance(df_cid).unwrap());
+        let pat_df = vm.alloc_string("#.##");
+        vm.invoke_virtual_args(df, "<init>", "(Ljava/lang/String;)V", vec![pat_df])
+            .unwrap();
+        let dbox_cid = vm.ensure_class_by_desc("Ljava/lang/Double;").unwrap();
+        let dbox = JValue::Obj(vm.arena.alloc(
+            dbox_cid,
+            Vec::new(),
+            Some(Native::DoubleBox(12.5)),
+        ));
+        let formatted = vm
+            .invoke_virtual_args(
+                df,
+                "format",
+                "(Ljava/lang/Object;)Ljava/lang/String;",
+                vec![dbox],
+            )
+            .unwrap();
+        assert_eq!(vm.str_of_jvalue(formatted).as_deref(), Some("12.5"));
+
+        // 10. Rect.<init>() installs Native::Rect on new-instance; Bitmap$Config.ARGB_8888 resolves.
+        let rect_cid = vm.ensure_class_by_desc("Landroid/graphics/Rect;").unwrap();
+        let rect = JValue::Obj(vm.alloc_instance(rect_cid).unwrap());
+        vm.invoke_virtual(rect, "<init>", "()V").unwrap();
+        vm.invoke_virtual_args(
+            rect,
+            "set",
+            "(IIII)V",
+            vec![JValue::Int(1), JValue::Int(2), JValue::Int(11), JValue::Int(22)],
+        )
+        .unwrap();
+        assert_eq!(vm.invoke_virtual(rect, "width", "()I").unwrap().as_int(), 10);
+
+        let cfg_fr = FieldRef {
+            class_desc: vm.intern("Landroid/graphics/Bitmap$Config;"),
+            name: vm.intern("ARGB_8888"),
+            ty: vm.intern("Landroid/graphics/Bitmap$Config;"),
+        };
+        assert!(vm.static_field_get(cfg_fr).is_ok());
+
+        // 11. JsonArray.<init>(List) installs Native::Json on new-instance.
+        let ja_cid = vm
+            .ensure_class_by_desc("Lkotlinx/serialization/json/JsonArray;")
+            .unwrap();
+        let ja = JValue::Obj(vm.alloc_instance(ja_cid).unwrap());
+        let al_cid = vm.ensure_class_by_desc("Ljava/util/ArrayList;").unwrap();
+        let empty_list = JValue::Obj(vm.alloc_instance(al_cid).unwrap());
+        vm.invoke_virtual(empty_list, "<init>", "()V").unwrap();
+        vm.invoke_virtual_args(ja, "<init>", "(Ljava/util/List;)V", vec![empty_list])
+            .unwrap();
+        assert_eq!(vm.invoke_virtual(ja, "size", "()I").unwrap().as_int(), 0);
+
+        // 12. ProtoIntegerType.DEFAULT is a non-null Enum object and values() returns 3 items.
+        let pi_fr = FieldRef {
+            class_desc: vm.intern("Lkotlinx/serialization/protobuf/ProtoIntegerType;"),
+            name: vm.intern("DEFAULT"),
+            ty: vm.intern("Lkotlinx/serialization/protobuf/ProtoIntegerType;"),
+        };
+        let pi_def = vm.static_field_get(pi_fr).unwrap();
+        assert!(matches!(pi_def, JValue::Obj(_)));
+        let pi_vals = vm
+            .invoke_static(
+                "Lkotlinx/serialization/protobuf/ProtoIntegerType;",
+                "values",
+                "()[Lkotlinx/serialization/protobuf/ProtoIntegerType;",
+                vec![],
+            )
+            .unwrap();
+        assert!(matches!(pi_vals, JValue::Obj(_)));
+
+        // 13. okio.Buffer$UnsafeCursor seek -> edit -> next -> close writes back to Buffer.
+        let buf_cid = vm.ensure_class_by_desc("Lokio/Buffer;").unwrap();
+        let obuf = JValue::Obj(vm.alloc_instance(buf_cid).unwrap());
+        vm.invoke_virtual(obuf, "<init>", "()V").unwrap();
+        let hi = vm.alloc_string("ab");
+        vm.invoke_virtual_args(obuf, "writeUtf8", "(Ljava/lang/String;)Lokio/Buffer;", vec![hi])
+            .unwrap();
+        let cur_cid = vm.ensure_class_by_desc("Lokio/Buffer$UnsafeCursor;").unwrap();
+        let cur = JValue::Obj(vm.alloc_instance(cur_cid).unwrap());
+        vm.invoke_virtual(cur, "<init>", "()V").unwrap();
+        vm.invoke_virtual_args(
+            obuf,
+            "readAndWriteUnsafe",
+            "(Lokio/Buffer$UnsafeCursor;)Lokio/Buffer$UnsafeCursor;",
+            vec![cur],
+        )
+        .unwrap();
+        let n1 = vm
+            .invoke_virtual_args(cur, "seek", "(J)I", vec![JValue::Long(0)])
+            .unwrap()
+            .as_int();
+        assert_eq!(n1, 2);
+        // Flip first byte 'a' (0x61) -> 'A' (0x41) in cursor.data (field slot 3)
+        let data_val = vm.arena.objects[cur.as_obj() as usize].fields[3];
+        if let Some(Native::Array(crate::vm::object::ArrayData::Byte(arr))) =
+            vm.arena.objects[data_val.as_obj() as usize].native.as_mut()
+        {
+            arr[0] = b'A' as i8;
+        }
+        let n2 = vm.invoke_virtual(cur, "next", "()I").unwrap().as_int();
+        assert_eq!(n2, -1);
+        vm.invoke_virtual(cur, "close", "()V").unwrap();
+        let out_str = vm
+            .invoke_virtual(obuf, "readUtf8", "()Ljava/lang/String;")
+            .unwrap();
+        assert_eq!(vm.str_of_jvalue(out_str).as_deref(), Some("Ab"));
     }
 }

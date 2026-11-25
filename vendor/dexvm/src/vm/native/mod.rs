@@ -501,6 +501,9 @@ pub(crate) fn default_native_for(vm: &mut Vm, id: u32) -> Option<Native> {
                     name: String::new(),
                     elements: Vec::new(),
                     element_annotations: Vec::new(),
+                    // wasm: SerialKind & owner defaults.
+                    kind_desc: "Lkotlinx/serialization/descriptors/StructureKind$CLASS;",
+                    owner: JValue::Null,
                 })
             }
             "Lkotlinx/serialization/internal/ArrayListSerializer;" => {

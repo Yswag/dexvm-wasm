@@ -1608,6 +1608,16 @@ fn binop(vm: &mut Vm, op: Binop, a: JValue, b: JValue) -> Result<JValue, u32> {
         (Binop::And, JValue::Long(x), JValue::Long(y)) => Ok(JValue::Long(x & y)),
         (Binop::Or, JValue::Long(x), JValue::Long(y)) => Ok(JValue::Long(x | y)),
         (Binop::Xor, JValue::Long(x), JValue::Long(y)) => Ok(JValue::Long(x ^ y)),
+        // wasm: Dalvik shl-long/shr-long/ushr-long take an Int shift count (2nd operand).
+        (Binop::Shl, JValue::Long(x), JValue::Int(y)) => {
+            Ok(JValue::Long(x.wrapping_shl(y as u32 & 63)))
+        }
+        (Binop::Shr, JValue::Long(x), JValue::Int(y)) => {
+            Ok(JValue::Long(x.wrapping_shr(y as u32 & 63)))
+        }
+        (Binop::Ushr, JValue::Long(x), JValue::Int(y)) => {
+            Ok(JValue::Long((x as u64).wrapping_shr(y as u32 & 63) as i64))
+        }
         (Binop::Shl, JValue::Long(x), JValue::Long(y)) => {
             Ok(JValue::Long(x.wrapping_shl(y as u32 & 63)))
         }

@@ -96,6 +96,30 @@ fn decimal_format_format_long(vm: &mut Vm, args: &[JValue]) -> R {
     ))
 }
 
+// wasm: java.text.Format.format(Object) inherited by DecimalFormat (used by Webtoons.com).
+fn decimal_format_format_object(vm: &mut Vm, args: &[JValue]) -> R {
+    let pattern = match payload(vm, args[0]) {
+        Some(Native::Str(p)) => p.clone(),
+        _ => return Err(npe(vm)),
+    };
+    let val = match args[1] {
+        JValue::Double(d) => d,
+        JValue::Float(f) => f as f64,
+        JValue::Long(l) => l as f64,
+        JValue::Int(i) => i as f64,
+        JValue::Obj(_) => match payload(vm, args[1]) {
+            Some(Native::DoubleBox(d)) => *d,
+            Some(Native::FloatBox(f)) => *f as f64,
+            Some(Native::LongBox(l)) => *l as f64,
+            Some(Native::IntBox(i)) => *i as f64,
+            Some(Native::Str(s)) => s.trim().parse::<f64>().unwrap_or(0.0),
+            _ => double_of(vm, args[1]),
+        },
+        JValue::Null => return Err(iae(vm, "Cannot format null")),
+    };
+    Ok(new_str(vm, &format_decimal(&pattern, val)))
+}
+
 pub(crate) const TABLE: &[NativeEntry] = &[
     ne!(
         "Ljava/text/DecimalFormat;",
@@ -124,6 +148,13 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(J)Ljava/lang/String;",
         true,
         decimal_format_format_long
+    ),
+    ne!(
+        "Ljava/text/DecimalFormat;",
+        "format",
+        "(Ljava/lang/Object;)Ljava/lang/String;",
+        true,
+        decimal_format_format_object
     ),
     ne!(
         "Ljava/text/DecimalFormatSymbols;",

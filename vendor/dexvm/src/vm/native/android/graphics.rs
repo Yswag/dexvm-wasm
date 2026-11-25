@@ -195,18 +195,18 @@ pub(crate) fn bitmap_compress(vm: &mut Vm, args: &[JValue]) -> R {
             Err(_) => return Ok(JValue::Int(0)),
         },
         _ => {
+            // wasm: encode JPEG/WEBP requests as PNG rather than an unrenderable raw RGBA stub.
             log::warn!(
-                "Bitmap.compress format {format} not supported by the host; writing raw RGBA stub"
+                "Bitmap.compress format {format} not natively encoded; falling back to PNG"
             );
-            let mut stub = Vec::with_capacity(12 + rgba.len());
-            stub.extend_from_slice(b"DEXVMRAW\0\x01");
-            stub.extend_from_slice(&width.to_le_bytes());
-            stub.extend_from_slice(&height.to_le_bytes());
-            stub.extend_from_slice(&rgba);
-            stub
+            match png_encode_rgba(width as u32, height as u32, &rgba) {
+                Ok(bytes) => bytes,
+                Err(_) => return Ok(JValue::Int(0)),
+            }
         }
     };
-    output_stream_append(vm, args[2], &encoded)?;
+    // wasm: compress(CompressFormat, int quality, OutputStream) -> stream is args[3], not args[2].
+    output_stream_append(vm, args[3], &encoded)?;
     Ok(JValue::Int(1))
 }
 
@@ -363,17 +363,36 @@ fn rgb_to_argb_words(rgba: &[u8]) -> Vec<u32> {
 
 /// `BitmapFactory.decodeStream(...)`: PNG/JPEG decode fully via zune; WEBP
 /// only contributes dimensions (pixels are empty) until a real decoder lands.
+// wasm: BitmapFactory.decodeStream and decodeByteArray are static (`instance: false`),
+// so the stream / byte array is `args[0]`, not `args[1]`.
 pub(crate) fn bitmap_factory_decode_stream(vm: &mut Vm, args: &[JValue]) -> R {
-    let bytes = match payload(vm, args[1]) {
-        Some(Native::ByteArrayInputStream { bytes, pos }) => bytes[*pos..].to_vec(),
+    let bytes = match args.first().and_then(|v| payload(vm, *v)) {
+        Some(Native::ByteArrayInputStream { bytes, pos }) => {
+            bytes[(*pos).min(bytes.len())..].to_vec()
+        }
         _ => return Err(npe(vm)),
     };
     decode_bitmap_bytes(vm, &bytes)
 }
 
 pub(crate) fn bitmap_factory_decode_array(vm: &mut Vm, args: &[JValue]) -> R {
-    let bytes = bytes_of(vm, args[1]).ok_or_else(|| npe(vm))?;
-    decode_bitmap_bytes(vm, &bytes)
+    let raw = args
+        .first()
+        .and_then(|v| bytes_of(vm, *v))
+        .ok_or_else(|| npe(vm))?;
+    let bytes = if args.len() >= 3 {
+        let off = int_of(vm, args[1]).max(0) as usize;
+        let len = int_of(vm, args[2]).max(0) as usize;
+        let end = off.saturating_add(len).min(raw.len());
+        if off <= end {
+            &raw[off..end]
+        } else {
+            &raw[..]
+        }
+    } else {
+        &raw[..]
+    };
+    decode_bitmap_bytes(vm, bytes)
 }
 
 pub(crate) fn bitmap_factory_decode_array_opts(vm: &mut Vm, args: &[JValue]) -> R {
@@ -722,8 +741,17 @@ fn rect_mut(vm: &mut Vm, v: JValue) -> Result<&mut Native, NatErr> {
     }
 }
 
+// wasm: new-instance Rect starts with native: None; attach Native::Rect on <init>.
 pub(crate) fn rect_init(vm: &mut Vm, args: &[JValue]) -> R {
-    let _ = rect_mut(vm, args[0])?;
+    let JValue::Obj(id) = args[0] else {
+        return Err(npe(vm));
+    };
+    vm.arena.objects[id as usize].native = Some(Native::Rect {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    });
     Ok(JValue::Null)
 }
 
@@ -734,19 +762,15 @@ pub(crate) fn rect_init_4(vm: &mut Vm, args: &[JValue]) -> R {
         int_of(vm, args[3]),
         int_of(vm, args[4]),
     );
-    let Native::Rect {
-        left,
-        top,
-        right,
-        bottom,
-    } = rect_mut(vm, args[0])?
-    else {
-        unreachable!("payload checked")
+    let JValue::Obj(id) = args[0] else {
+        return Err(npe(vm));
     };
-    *left = l;
-    *top = t;
-    *right = r;
-    *bottom = b;
+    vm.arena.objects[id as usize].native = Some(Native::Rect {
+        left: l,
+        top: t,
+        right: r,
+        bottom: b,
+    });
     Ok(JValue::Null)
 }
 

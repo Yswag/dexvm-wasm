@@ -2026,11 +2026,12 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &[],
         0
     ),
+    // wasm: JsonObject implements Map<String, JsonElement> and JsonArray implements List<JsonElement>.
     #[cfg(feature = "tachiyomi")]
     shim!(
         "Lkotlinx/serialization/json/JsonObject;",
         Some("Lkotlinx/serialization/json/JsonElement;"),
-        &[],
+        &["Ljava/util/Map;"],
         0,
         [sdef!(
             "Companion",
@@ -2049,7 +2050,11 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     shim!(
         "Lkotlinx/serialization/json/JsonArray;",
         Some("Lkotlinx/serialization/json/JsonElement;"),
-        &[],
+        &[
+            "Ljava/util/List;",
+            "Ljava/util/Collection;",
+            "Ljava/lang/Iterable;",
+        ],
         0
     ),
     #[cfg(feature = "tachiyomi")]
@@ -2125,6 +2130,51 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &["Lkotlinx/serialization/encoding/Encoder;"],
         ACC_INTERFACE | ACC_ABSTRACT
     ),
+    // wasm: kotlinx.serialization.encoding.AbstractDecoder / AbstractEncoder
+    // (subclassed by custom formats such as kotlinx-serialization-protobuf in MANGA Plus).
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/encoding/AbstractDecoder;",
+        Some("Ljava/lang/Object;"),
+        &[
+            "Lkotlinx/serialization/encoding/Decoder;",
+            "Lkotlinx/serialization/encoding/CompositeDecoder;",
+        ],
+        ACC_ABSTRACT
+    ),
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/encoding/AbstractEncoder;",
+        Some("Ljava/lang/Object;"),
+        &[
+            "Lkotlinx/serialization/encoding/Encoder;",
+            "Lkotlinx/serialization/encoding/CompositeEncoder;",
+        ],
+        ACC_ABSTRACT
+    ),
+    // wasm: kotlinx.serialization.protobuf annotations/enums (used by MANGA Plus).
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/protobuf/ProtoIntegerType;",
+        Some("Ljava/lang/Enum;"),
+        &[],
+        0,
+        [
+            sdef!("DEFAULT", "Lkotlinx/serialization/protobuf/ProtoIntegerType;", ShimValue::Lazy(native::lazy_proto_int_default)),
+            sdef!("SIGNED", "Lkotlinx/serialization/protobuf/ProtoIntegerType;", ShimValue::Lazy(native::lazy_proto_int_signed)),
+            sdef!("FIXED", "Lkotlinx/serialization/protobuf/ProtoIntegerType;", ShimValue::Lazy(native::lazy_proto_int_fixed)),
+        ]
+    ),
+    // wasm: java.lang.annotation.Annotation interface referenced by @ProtoNumber etc.
+    shim!("Ljava/lang/annotation/Annotation;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/protobuf/ProtoNumber;", None, &["Ljava/lang/annotation/Annotation;"], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/protobuf/ProtoType;", None, &["Ljava/lang/annotation/Annotation;"], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/protobuf/ProtoOneOf;", None, &["Ljava/lang/annotation/Annotation;"], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/protobuf/ProtoPacked;", None, &["Ljava/lang/annotation/Annotation;"], ACC_INTERFACE | ACC_ABSTRACT),
     #[cfg(feature = "tachiyomi")]
     shim!(
         "Lkotlinx/serialization/json/JsonDecoder;",
@@ -2139,6 +2189,81 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &[],
         ACC_INTERFACE | ACC_ABSTRACT
     ),
+    // wasm: kotlinx.serialization.descriptors.SerialKind hierarchy (MANGA Plus ProtoBuf etc.).
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/SerialKind;", Some("Ljava/lang/Object;"), &[], ACC_ABSTRACT),
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/descriptors/SerialKind$ENUM;",
+        Some("Lkotlinx/serialization/descriptors/SerialKind;"),
+        &[],
+        0,
+        [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/SerialKind$ENUM;", ShimValue::Lazy(native::lazy_serial_kind_enum))]
+    ),
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/descriptors/SerialKind$CONTEXTUAL;",
+        Some("Lkotlinx/serialization/descriptors/SerialKind;"),
+        &[],
+        0,
+        [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/SerialKind$CONTEXTUAL;", ShimValue::Lazy(native::lazy_serial_kind_contextual))]
+    ),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/StructureKind;", Some("Lkotlinx/serialization/descriptors/SerialKind;"), &[], ACC_ABSTRACT),
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/descriptors/StructureKind$CLASS;",
+        Some("Lkotlinx/serialization/descriptors/StructureKind;"),
+        &[],
+        0,
+        [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/StructureKind$CLASS;", ShimValue::Lazy(native::lazy_structure_kind_class))]
+    ),
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/descriptors/StructureKind$LIST;",
+        Some("Lkotlinx/serialization/descriptors/StructureKind;"),
+        &[],
+        0,
+        [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/StructureKind$LIST;", ShimValue::Lazy(native::lazy_structure_kind_list))]
+    ),
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/descriptors/StructureKind$MAP;",
+        Some("Lkotlinx/serialization/descriptors/StructureKind;"),
+        &[],
+        0,
+        [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/StructureKind$MAP;", ShimValue::Lazy(native::lazy_structure_kind_map))]
+    ),
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/descriptors/StructureKind$OBJECT;",
+        Some("Lkotlinx/serialization/descriptors/StructureKind;"),
+        &[],
+        0,
+        [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/StructureKind$OBJECT;", ShimValue::Lazy(native::lazy_structure_kind_object))]
+    ),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PrimitiveKind;", Some("Lkotlinx/serialization/descriptors/SerialKind;"), &[], ACC_ABSTRACT),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PrimitiveKind$STRING;", Some("Lkotlinx/serialization/descriptors/PrimitiveKind;"), &[], 0, [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/PrimitiveKind$STRING;", ShimValue::Lazy(native::lazy_primitive_kind_string))]),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PrimitiveKind$INT;", Some("Lkotlinx/serialization/descriptors/PrimitiveKind;"), &[], 0, [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/PrimitiveKind$INT;", ShimValue::Lazy(native::lazy_primitive_kind_int))]),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PrimitiveKind$LONG;", Some("Lkotlinx/serialization/descriptors/PrimitiveKind;"), &[], 0, [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/PrimitiveKind$LONG;", ShimValue::Lazy(native::lazy_primitive_kind_long))]),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PrimitiveKind$BOOLEAN;", Some("Lkotlinx/serialization/descriptors/PrimitiveKind;"), &[], 0, [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/PrimitiveKind$BOOLEAN;", ShimValue::Lazy(native::lazy_primitive_kind_boolean))]),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PrimitiveKind$FLOAT;", Some("Lkotlinx/serialization/descriptors/PrimitiveKind;"), &[], 0, [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/PrimitiveKind$FLOAT;", ShimValue::Lazy(native::lazy_primitive_kind_float))]),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PrimitiveKind$DOUBLE;", Some("Lkotlinx/serialization/descriptors/PrimitiveKind;"), &[], 0, [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/PrimitiveKind$DOUBLE;", ShimValue::Lazy(native::lazy_primitive_kind_double))]),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PrimitiveKind$BYTE;", Some("Lkotlinx/serialization/descriptors/PrimitiveKind;"), &[], 0, [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/PrimitiveKind$BYTE;", ShimValue::Lazy(native::lazy_primitive_kind_byte))]),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PrimitiveKind$SHORT;", Some("Lkotlinx/serialization/descriptors/PrimitiveKind;"), &[], 0, [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/PrimitiveKind$SHORT;", ShimValue::Lazy(native::lazy_primitive_kind_short))]),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PrimitiveKind$CHAR;", Some("Lkotlinx/serialization/descriptors/PrimitiveKind;"), &[], 0, [sdef!("INSTANCE", "Lkotlinx/serialization/descriptors/PrimitiveKind$CHAR;", ShimValue::Lazy(native::lazy_primitive_kind_char))]),
+    #[cfg(feature = "tachiyomi")]
+    shim!("Lkotlinx/serialization/descriptors/PolymorphicKind;", Some("Lkotlinx/serialization/descriptors/SerialKind;"), &[], ACC_ABSTRACT),
     #[cfg(feature = "tachiyomi")]
     shim!(
         "Lkotlinx/serialization/internal/GeneratedSerializer;",
@@ -2153,12 +2278,29 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &["Lkotlinx/serialization/descriptors/SerialDescriptor;"],
         0
     ),
+    // wasm: AbstractCollectionSerializer superclass for collection/array serializers (ProtoBuf merge).
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/internal/AbstractCollectionSerializer;",
+        Some("Ljava/lang/Object;"),
+        &["Lkotlinx/serialization/KSerializer;"],
+        ACC_ABSTRACT
+    ),
     #[cfg(feature = "tachiyomi")]
     shim!(
         "Lkotlinx/serialization/internal/ArrayListSerializer;",
-        Some("Ljava/lang/Object;"),
+        Some("Lkotlinx/serialization/internal/AbstractCollectionSerializer;"),
         &["Lkotlinx/serialization/KSerializer;"],
         0
+    ),
+    // wasm: ByteArraySerializer singleton (BuiltinSerializersKt.ByteArraySerializer()).
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/internal/ByteArraySerializer;",
+        Some("Lkotlinx/serialization/internal/AbstractCollectionSerializer;"),
+        &["Lkotlinx/serialization/KSerializer;"],
+        0,
+        [sdef!("INSTANCE", "Lkotlinx/serialization/internal/ByteArraySerializer;", ShimValue::Lazy(native::lazy_byte_array_serializer))]
     ),
     #[cfg(feature = "tachiyomi")]
     shim!(
@@ -2391,6 +2533,31 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &[],
         0
     ),
+    // wasm: java.util.function.* functional interfaces (used by MANGA Plus and Java 8+ stdlib).
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/Function;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/BiFunction;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/Consumer;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/BiConsumer;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/Supplier;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/Predicate;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/UnaryOperator;", None, &["Ljava/util/function/Function;"], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/BinaryOperator;", None, &["Ljava/util/function/BiFunction;"], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/IntFunction;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/ToIntFunction;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/ToLongFunction;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "java")]
+    shim!("Ljava/util/function/ToDoubleFunction;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
     #[cfg(feature = "kotlin")]
     shim!(
         "Lkotlin/jvm/functions/Function3;",
@@ -2965,6 +3132,7 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &[],
         0
     ),
+    // wasm: enum static fields must carry their enum descriptor, not "I".
     #[cfg(feature = "android")]
     shim!(
         "Landroid/graphics/Bitmap$CompressFormat;",
@@ -2972,11 +3140,11 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &[],
         0,
         [
-            sdef!("JPEG", "I", ShimValue::Const(JValue::Int(0))),
-            sdef!("PNG", "I", ShimValue::Const(JValue::Int(1))),
-            sdef!("WEBP", "I", ShimValue::Const(JValue::Int(2))),
-            sdef!("WEBP_LOSSY", "I", ShimValue::Const(JValue::Int(3))),
-            sdef!("WEBP_LOSSLESS", "I", ShimValue::Const(JValue::Int(4))),
+            sdef!("JPEG", "Landroid/graphics/Bitmap$CompressFormat;", ShimValue::Const(JValue::Int(0))),
+            sdef!("PNG", "Landroid/graphics/Bitmap$CompressFormat;", ShimValue::Const(JValue::Int(1))),
+            sdef!("WEBP", "Landroid/graphics/Bitmap$CompressFormat;", ShimValue::Const(JValue::Int(2))),
+            sdef!("WEBP_LOSSY", "Landroid/graphics/Bitmap$CompressFormat;", ShimValue::Const(JValue::Int(3))),
+            sdef!("WEBP_LOSSLESS", "Landroid/graphics/Bitmap$CompressFormat;", ShimValue::Const(JValue::Int(4))),
         ]
     ),
     #[cfg(feature = "android")]
@@ -2986,11 +3154,12 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &[],
         0,
         [
-            sdef!("ARGB_8888", "I", ShimValue::Const(JValue::Int(0))),
-            sdef!("ALPHA_8", "I", ShimValue::Const(JValue::Int(1))),
-            sdef!("RGB_565", "I", ShimValue::Const(JValue::Int(2))),
-            sdef!("ARGB_4444", "I", ShimValue::Const(JValue::Int(3))),
-            sdef!("HARDWARE", "I", ShimValue::Const(JValue::Int(4))),
+            sdef!("ARGB_8888", "Landroid/graphics/Bitmap$Config;", ShimValue::Const(JValue::Int(0))),
+            sdef!("ALPHA_8", "Landroid/graphics/Bitmap$Config;", ShimValue::Const(JValue::Int(1))),
+            sdef!("RGB_565", "Landroid/graphics/Bitmap$Config;", ShimValue::Const(JValue::Int(2))),
+            sdef!("ARGB_4444", "Landroid/graphics/Bitmap$Config;", ShimValue::Const(JValue::Int(3))),
+            sdef!("HARDWARE", "Landroid/graphics/Bitmap$Config;", ShimValue::Const(JValue::Int(4))),
+            sdef!("RGBA_F16", "Landroid/graphics/Bitmap$Config;", ShimValue::Const(JValue::Int(5))),
         ]
     ),
     #[cfg(feature = "android")]
@@ -3461,6 +3630,23 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &[],
         0
     ),
+    // wasm: okio.Buffer$UnsafeCursor (MANGA Plus XOR image decryption etc.).
+    #[cfg(feature = "okhttp")]
+    shim!(
+        "Lokio/Buffer$UnsafeCursor;",
+        Some("Ljava/lang/Object;"),
+        &["Ljava/io/Closeable;"],
+        0,
+        [],
+        fields = [
+            ("buffer", "Lokio/Buffer;"),
+            ("readWrite", "Z"),
+            ("offset", "J"),
+            ("data", "[B"),
+            ("start", "I"),
+            ("end", "I"),
+        ]
+    ),
     #[cfg(feature = "okhttp")]
     shim!("Lokio/InflaterSource;", Some("Ljava/lang/Object;"), &[], 0),
     #[cfg(feature = "okhttp")]
@@ -3797,6 +3983,14 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
     #[cfg(feature = "tachiyomi")]
     shim!(
         "Lkotlinx/serialization/modules/SerializersModuleKt;",
+        Some("Ljava/lang/Object;"),
+        &[],
+        0
+    ),
+    // wasm: EmptySerializersModule() helper class (MANGA Plus ProtoBuf etc.).
+    #[cfg(feature = "tachiyomi")]
+    shim!(
+        "Lkotlinx/serialization/modules/SerializersModuleBuildersKt;",
         Some("Ljava/lang/Object;"),
         &[],
         0

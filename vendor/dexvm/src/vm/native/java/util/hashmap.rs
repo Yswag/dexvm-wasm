@@ -173,6 +173,41 @@ pub(crate) fn map_put_if_absent(vm: &mut Vm, args: &[JValue]) -> R {
     }
 }
 
+// wasm: Map.computeIfAbsent(K, Function<K, V>) (used by MANGA Plus / Java 8+ stdlib).
+pub(crate) fn map_compute_if_absent(vm: &mut Vm, args: &[JValue]) -> R {
+    let entries = match payload(vm, args[0]) {
+        Some(Native::Map(entries)) => entries.clone(),
+        _ => return Err(npe(vm)),
+    };
+    if let Some(i) = map_find(vm, &entries, args[1])? {
+        if !entries[i].1.is_null_ref() {
+            return Ok(entries[i].1);
+        }
+    }
+    let val = inv_virt(
+        vm,
+        args[2],
+        "apply",
+        "(Ljava/lang/Object;)Ljava/lang/Object;",
+        &[args[1]],
+    )?;
+    if !val.is_null_ref() {
+        let mut cur = match payload(vm, args[0]) {
+            Some(Native::Map(e)) => e.clone(),
+            _ => return Err(npe(vm)),
+        };
+        if let Some(i) = map_find(vm, &cur, args[1])? {
+            cur[i].1 = val;
+        } else {
+            cur.push((args[1], val));
+        }
+        if let Some(Native::Map(dst)) = payload_mut(vm, args[0]) {
+            *dst = cur;
+        }
+    }
+    Ok(val)
+}
+
 pub(crate) fn map_contains_key(vm: &mut Vm, args: &[JValue]) -> R {
     let entries = match payload(vm, args[0]) {
         Some(Native::Map(entries)) => entries.clone(),
@@ -351,6 +386,13 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
         true,
         map_put_if_absent
+    ),
+    ne!(
+        "Ljava/util/HashMap;",
+        "computeIfAbsent",
+        "(Ljava/lang/Object;Ljava/util/function/Function;)Ljava/lang/Object;",
+        true,
+        map_compute_if_absent
     ),
     ne!(
         "Ljava/util/HashMap;",
@@ -594,5 +636,12 @@ pub(crate) const CHM_TABLE: &[NativeEntry] = &[
         "()Ljava/lang/String;",
         true,
         map_to_string
+    ),
+    ne!(
+        "Ljava/util/concurrent/ConcurrentHashMap;",
+        "computeIfAbsent",
+        "(Ljava/lang/Object;Ljava/util/function/Function;)Ljava/lang/Object;",
+        true,
+        map_compute_if_absent
     ),
 ];

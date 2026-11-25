@@ -266,6 +266,44 @@ pub(crate) fn okio_identity(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(args[0])
 }
 
+// wasm: Okio.buffer(Source) drains custom DEX Source/ForwardingSource subclasses
+// via their bytecode read(Buffer, Long) so streaming decryptors (e.g. MANGA Plus XOR) run.
+pub(crate) fn okio_buffer_source(vm: &mut Vm, args: &[JValue]) -> R {
+    let src = args[0];
+    let JValue::Obj(obj_id) = src else {
+        return Ok(src);
+    };
+    let read_ref = MethodRef {
+        name: vm.intern("read"),
+        sig: vm.intern("(Lokio/Buffer;J)J"),
+        ret: 0,
+        args: Vec::new(),
+        class_desc: 0,
+    };
+    let target = match vm.resolve_target(InvokeKind::Virtual, &read_ref, Some(obj_id), 0) {
+        Ok(t @ Target::Bytecode { .. }) => t,
+        _ => return Ok(src),
+    };
+    let sink = alloc(
+        vm,
+        "Lokio/Buffer;",
+        Native::OkioBuf {
+            bytes: Vec::new(),
+            pos: 0,
+        },
+    )?;
+    loop {
+        let raw_n = vm
+            .call_target(target.clone(), vec![src, sink, JValue::Long(65536)])
+            .map_err(nat_fatal)?;
+        let n = long_of(vm, raw_n);
+        if n <= 0 {
+            break;
+        }
+    }
+    Ok(sink)
+}
+
 fn flush_sink(vm: &mut Vm, sink: JValue) -> Result<(), NatErr> {
     let Some(Native::OkioSink {
         path,
@@ -549,6 +587,186 @@ fn okio_buffer_read_byte(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Int(b as i8 as i32))
 }
 
+// wasm: additional BufferedSource/Buffer primitive read methods (ProtoBuf streams etc.).
+fn okio_read_n(vm: &mut Vm, obj: JValue, n: usize) -> Result<Vec<u8>, NatErr> {
+    let Some(Native::OkioBuf { bytes, pos }) = payload_mut(vm, obj) else {
+        return Err(npe(vm));
+    };
+    if *pos + n > bytes.len() {
+        return Err(NatErr::Throw(
+            vm.throwable_of("Ljava/io/EOFException;", "end of buffer"),
+        ));
+    }
+    let out = bytes[*pos..*pos + n].to_vec();
+    *pos += n;
+    Ok(out)
+}
+fn okio_read_int(vm: &mut Vm, args: &[JValue]) -> R {
+    let b = okio_read_n(vm, args[0], 4)?;
+    Ok(JValue::Int(i32::from_be_bytes([b[0], b[1], b[2], b[3]])))
+}
+fn okio_read_int_le(vm: &mut Vm, args: &[JValue]) -> R {
+    let b = okio_read_n(vm, args[0], 4)?;
+    Ok(JValue::Int(i32::from_le_bytes([b[0], b[1], b[2], b[3]])))
+}
+fn okio_read_long(vm: &mut Vm, args: &[JValue]) -> R {
+    let b = okio_read_n(vm, args[0], 8)?;
+    Ok(JValue::Long(i64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])))
+}
+fn okio_read_long_le(vm: &mut Vm, args: &[JValue]) -> R {
+    let b = okio_read_n(vm, args[0], 8)?;
+    Ok(JValue::Long(i64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])))
+}
+fn okio_read_utf8_count(vm: &mut Vm, args: &[JValue]) -> R {
+    let n = long_of(vm, args[1]).max(0) as usize;
+    let b = okio_read_n(vm, args[0], n)?;
+    let s = String::from_utf8_lossy(&b).into_owned();
+    Ok(new_str(vm, &s))
+}
+fn okio_skip(vm: &mut Vm, args: &[JValue]) -> R {
+    let n = long_of(vm, args[1]).max(0) as usize;
+    let _ = okio_read_n(vm, args[0], n)?;
+    Ok(JValue::Null)
+}
+
+// wasm: okio.Buffer$UnsafeCursor (fields: 0=buffer, 1=readWrite, 2=offset, 3=data, 4=start, 5=end).
+fn okio_unsafe_cursor_init(vm: &mut Vm, args: &[JValue]) -> R {
+    let JValue::Obj(id) = args[0] else {
+        return Err(npe(vm));
+    };
+    let f = &mut vm.arena.objects[id as usize].fields;
+    if f.len() >= 6 {
+        f[0] = JValue::Null;
+        f[1] = JValue::Int(0);
+        f[2] = JValue::Long(-1);
+        f[3] = JValue::Null;
+        f[4] = JValue::Int(-1);
+        f[5] = JValue::Int(-1);
+    }
+    Ok(JValue::Null)
+}
+fn okio_buffer_attach_cursor(vm: &mut Vm, buf: JValue, cursor: JValue, read_write: bool) -> R {
+    let cur = if cursor.is_null_ref() {
+        let c = alloc(vm, "Lokio/Buffer$UnsafeCursor;", Native::Opaque)?;
+        okio_unsafe_cursor_init(vm, &[c])?;
+        c
+    } else {
+        cursor
+    };
+    let JValue::Obj(id) = cur else {
+        return Err(npe(vm));
+    };
+    let f = &mut vm.arena.objects[id as usize].fields;
+    if f.len() >= 6 {
+        f[0] = buf;
+        f[1] = JValue::Int(i32::from(read_write));
+        f[2] = JValue::Long(-1);
+        f[3] = JValue::Null;
+        f[4] = JValue::Int(-1);
+        f[5] = JValue::Int(-1);
+    }
+    Ok(cur)
+}
+fn okio_buffer_read_and_write_unsafe_1(vm: &mut Vm, args: &[JValue]) -> R {
+    okio_buffer_attach_cursor(vm, args[0], args[1], true)
+}
+fn okio_buffer_read_and_write_unsafe_0(vm: &mut Vm, args: &[JValue]) -> R {
+    okio_buffer_attach_cursor(vm, args[0], JValue::Null, true)
+}
+fn okio_buffer_read_unsafe_1(vm: &mut Vm, args: &[JValue]) -> R {
+    okio_buffer_attach_cursor(vm, args[0], args[1], false)
+}
+fn okio_buffer_read_unsafe_0(vm: &mut Vm, args: &[JValue]) -> R {
+    okio_buffer_attach_cursor(vm, args[0], JValue::Null, false)
+}
+fn okio_unsafe_cursor_flush(vm: &mut Vm, id: u32) {
+    let (buf, rw, data) = {
+        let f = &vm.arena.objects[id as usize].fields;
+        if f.len() < 6 {
+            return;
+        }
+        (f[0], int_of(vm, f[1]) != 0, f[3])
+    };
+    if rw {
+        if let Some(Native::Array(ArrayData::Byte(arr))) = payload(vm, data) {
+            let updated: Vec<u8> = arr.iter().map(|&b| b as u8).collect();
+            if let Some(Native::OkioBuf { bytes, pos }) = payload_mut(vm, buf) {
+                let p = (*pos).min(bytes.len());
+                bytes.truncate(p);
+                bytes.extend_from_slice(&updated);
+            }
+        }
+    }
+}
+fn okio_unsafe_cursor_seek(vm: &mut Vm, args: &[JValue]) -> R {
+    let JValue::Obj(id) = args[0] else {
+        return Err(npe(vm));
+    };
+    // wasm: flush any in-place edits made to cursor.data before seeking/terminating.
+    okio_unsafe_cursor_flush(vm, id);
+    let offset = long_of(vm, args[1]);
+    let (buf, existing_data) = {
+        let f = &vm.arena.objects[id as usize].fields;
+        if f.len() < 6 {
+            return Err(npe(vm));
+        }
+        (f[0], f[3])
+    };
+    let slice: Vec<i8> = match payload(vm, buf) {
+        Some(Native::OkioBuf { bytes, pos }) => bytes[*pos..].iter().map(|&b| b as i8).collect(),
+        _ => return Err(npe(vm)),
+    };
+    let len = slice.len();
+    if offset < 0 || (offset as usize) >= len {
+        let f = &mut vm.arena.objects[id as usize].fields;
+        f[2] = JValue::Long(offset);
+        f[3] = JValue::Null;
+        f[4] = JValue::Int(-1);
+        f[5] = JValue::Int(-1);
+        return Ok(JValue::Int(-1));
+    }
+    let data = match payload(vm, existing_data) {
+        Some(Native::Array(ArrayData::Byte(b))) if b.len() == len => existing_data,
+        _ => alloc(vm, "[B", Native::Array(ArrayData::Byte(slice)))?,
+    };
+    let f = &mut vm.arena.objects[id as usize].fields;
+    f[2] = JValue::Long(offset);
+    f[3] = data;
+    f[4] = JValue::Int(offset as i32);
+    f[5] = JValue::Int(len as i32);
+    Ok(JValue::Int((len - offset as usize) as i32))
+}
+fn okio_unsafe_cursor_next(vm: &mut Vm, args: &[JValue]) -> R {
+    let JValue::Obj(id) = args[0] else {
+        return Err(npe(vm));
+    };
+    let (cur_off, cur_end) = {
+        let f = &vm.arena.objects[id as usize].fields;
+        if f.len() < 6 {
+            return Err(npe(vm));
+        }
+        (long_of(vm, f[2]), int_of(vm, f[5]))
+    };
+    let target = if cur_off == -1 { 0i64 } else { cur_end as i64 };
+    okio_unsafe_cursor_seek(vm, &[args[0], JValue::Long(target)])
+}
+fn okio_unsafe_cursor_close(vm: &mut Vm, args: &[JValue]) -> R {
+    let JValue::Obj(id) = args[0] else {
+        return Err(npe(vm));
+    };
+    okio_unsafe_cursor_flush(vm, id);
+    let f = &mut vm.arena.objects[id as usize].fields;
+    if f.len() >= 6 {
+        f[0] = JValue::Null;
+        f[1] = JValue::Int(0);
+        f[2] = JValue::Long(-1);
+        f[3] = JValue::Null;
+        f[4] = JValue::Int(-1);
+        f[5] = JValue::Int(-1);
+    }
+    Ok(JValue::Null)
+}
+
 fn okio_buffer_output_stream(vm: &mut Vm, args: &[JValue]) -> R {
     let buffer = args[0].as_obj();
     alloc(
@@ -660,7 +878,7 @@ pub(crate) const OKIO_TABLE: &[NativeEntry] = &[
         "buffer",
         "(Lokio/Source;)Lokio/BufferedSource;",
         false,
-        okio_identity
+        okio_buffer_source
     ),
     ne!(
         "Lokio/Okio;",
@@ -772,7 +990,7 @@ pub(crate) const OKIO_TABLE: &[NativeEntry] = &[
         "buffer",
         "(Lokio/Source;)Lokio/BufferedSource;",
         false,
-        okio_identity
+        okio_buffer_source
     ),
     ne!(
         "Lokio/ByteStreamsKt;",
@@ -786,7 +1004,7 @@ pub(crate) const OKIO_TABLE: &[NativeEntry] = &[
         "buffer",
         "(Lokio/Source;)Lokio/BufferedSource;",
         false,
-        okio_identity
+        okio_buffer_source
     ),
     ne!(
         "Lokio/BufferedSource;",
@@ -830,6 +1048,29 @@ pub(crate) const OKIO_TABLE: &[NativeEntry] = &[
         true,
         okio_exhausted
     ),
+    // wasm: primitive read methods on BufferedSource & Buffer (MANGA Plus ProtoBuf etc.).
+    ne!("Lokio/BufferedSource;", "readByte", "()B", true, okio_buffer_read_byte),
+    ne!("Lokio/BufferedSource;", "readInt", "()I", true, okio_read_int),
+    ne!("Lokio/BufferedSource;", "readIntLe", "()I", true, okio_read_int_le),
+    ne!("Lokio/BufferedSource;", "readLong", "()J", true, okio_read_long),
+    ne!("Lokio/BufferedSource;", "readLongLe", "()J", true, okio_read_long_le),
+    ne!("Lokio/BufferedSource;", "readUtf8", "(J)Ljava/lang/String;", true, okio_read_utf8_count),
+    ne!("Lokio/BufferedSource;", "skip", "(J)V", true, okio_skip),
+    ne!("Lokio/Buffer;", "readInt", "()I", true, okio_read_int),
+    ne!("Lokio/Buffer;", "readIntLe", "()I", true, okio_read_int_le),
+    ne!("Lokio/Buffer;", "readLong", "()J", true, okio_read_long),
+    ne!("Lokio/Buffer;", "readLongLe", "()J", true, okio_read_long_le),
+    ne!("Lokio/Buffer;", "readUtf8", "(J)Ljava/lang/String;", true, okio_read_utf8_count),
+    ne!("Lokio/Buffer;", "skip", "(J)V", true, okio_skip),
+    // wasm: Buffer$UnsafeCursor shims (MANGA Plus XOR image decryption etc.).
+    ne!("Lokio/Buffer;", "readAndWriteUnsafe", "(Lokio/Buffer$UnsafeCursor;)Lokio/Buffer$UnsafeCursor;", true, okio_buffer_read_and_write_unsafe_1),
+    ne!("Lokio/Buffer;", "readAndWriteUnsafe", "()Lokio/Buffer$UnsafeCursor;", true, okio_buffer_read_and_write_unsafe_0),
+    ne!("Lokio/Buffer;", "readUnsafe", "(Lokio/Buffer$UnsafeCursor;)Lokio/Buffer$UnsafeCursor;", true, okio_buffer_read_unsafe_1),
+    ne!("Lokio/Buffer;", "readUnsafe", "()Lokio/Buffer$UnsafeCursor;", true, okio_buffer_read_unsafe_0),
+    ne!("Lokio/Buffer$UnsafeCursor;", "<init>", "()V", true, okio_unsafe_cursor_init),
+    ne!("Lokio/Buffer$UnsafeCursor;", "seek", "(J)I", true, okio_unsafe_cursor_seek),
+    ne!("Lokio/Buffer$UnsafeCursor;", "next", "()I", true, okio_unsafe_cursor_next),
+    ne!("Lokio/Buffer$UnsafeCursor;", "close", "()V", true, okio_unsafe_cursor_close),
     ne!("Lokio/Buffer;", "get", "(J)B", true, okio_buffer_get),
     ne!(
         "Lokio/Buffer;",

@@ -242,7 +242,8 @@ fn summary_of(v: &JsonVal) -> String {
     }
 }
 
-fn alloc_json_node(vm: &mut Vm, v: &JsonVal) -> R {
+// wasm: exposed for coll_elems(JsonArray).
+pub(crate) fn alloc_json_node(vm: &mut Vm, v: &JsonVal) -> R {
     alloc(vm, json_node_class(v), Native::Json(v.clone()))
 }
 
@@ -472,10 +473,11 @@ fn json_array_init(vm: &mut Vm, args: &[JValue]) -> R {
             _ => Err(npe(vm)),
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let Some(native) = payload_mut(vm, args[0]) else {
+    // wasm: new-instance leaves native=None until <init> installs Native::Json.
+    let Some(JValue::Obj(this)) = args.first().copied() else {
         return Err(npe(vm));
     };
-    *native = Native::Json(JsonVal::Array(values));
+    vm.arena.objects[this as usize].native = Some(Native::Json(JsonVal::Array(values)));
     Ok(JValue::Null)
 }
 
@@ -541,6 +543,250 @@ fn descriptor_push_annotation(vm: &mut Vm, args: &[JValue]) -> R {
         }
     }
     Ok(JValue::Null)
+}
+
+// wasm: kotlinx.serialization.descriptors.SerialKind singletons & getKind().
+pub(crate) fn lazy_serial_kind_enum(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/SerialKind$ENUM;", Native::Opaque)
+        .unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_serial_kind_contextual(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/SerialKind$CONTEXTUAL;", Native::Opaque)
+        .unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_structure_kind_class(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/StructureKind$CLASS;", Native::Opaque)
+        .unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_structure_kind_list(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/StructureKind$LIST;", Native::Opaque)
+        .unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_structure_kind_map(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/StructureKind$MAP;", Native::Opaque)
+        .unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_structure_kind_object(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/StructureKind$OBJECT;", Native::Opaque)
+        .unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_primitive_kind_string(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/PrimitiveKind$STRING;", Native::Opaque).unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_primitive_kind_int(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/PrimitiveKind$INT;", Native::Opaque).unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_primitive_kind_long(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/PrimitiveKind$LONG;", Native::Opaque).unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_primitive_kind_boolean(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/PrimitiveKind$BOOLEAN;", Native::Opaque).unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_primitive_kind_float(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/PrimitiveKind$FLOAT;", Native::Opaque).unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_primitive_kind_double(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/PrimitiveKind$DOUBLE;", Native::Opaque).unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_primitive_kind_byte(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/PrimitiveKind$BYTE;", Native::Opaque).unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_primitive_kind_short(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/PrimitiveKind$SHORT;", Native::Opaque).unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_primitive_kind_char(vm: &mut Vm) -> JValue {
+    alloc(vm, "Lkotlinx/serialization/descriptors/PrimitiveKind$CHAR;", Native::Opaque).unwrap_or(JValue::Null)
+}
+// wasm: kotlinx.serialization.protobuf.ProtoIntegerType enum constants.
+pub(crate) fn lazy_proto_int_default(vm: &mut Vm) -> JValue {
+    alloc(
+        vm,
+        "Lkotlinx/serialization/protobuf/ProtoIntegerType;",
+        Native::Enum { name: "DEFAULT".into(), ordinal: 0 },
+    )
+    .unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_proto_int_signed(vm: &mut Vm) -> JValue {
+    alloc(
+        vm,
+        "Lkotlinx/serialization/protobuf/ProtoIntegerType;",
+        Native::Enum { name: "SIGNED".into(), ordinal: 1 },
+    )
+    .unwrap_or(JValue::Null)
+}
+pub(crate) fn lazy_proto_int_fixed(vm: &mut Vm) -> JValue {
+    alloc(
+        vm,
+        "Lkotlinx/serialization/protobuf/ProtoIntegerType;",
+        Native::Enum { name: "FIXED".into(), ordinal: 2 },
+    )
+    .unwrap_or(JValue::Null)
+}
+fn proto_int_values(vm: &mut Vm, _args: &[JValue]) -> R {
+    let mut items = Vec::with_capacity(3);
+    for name in ["DEFAULT", "SIGNED", "FIXED"] {
+        let fr = crate::vm::FieldRef {
+            class_desc: vm.intern("Lkotlinx/serialization/protobuf/ProtoIntegerType;"),
+            name: vm.intern(name),
+            ty: vm.intern("Lkotlinx/serialization/protobuf/ProtoIntegerType;"),
+        };
+        items.push(vm.static_field_get(fr).map_err(nat_fatal)?);
+    }
+    alloc(
+        vm,
+        "[Lkotlinx/serialization/protobuf/ProtoIntegerType;",
+        Native::Array(ArrayData::Obj(items)),
+    )
+}
+fn descriptor_get_kind(vm: &mut Vm, args: &[JValue]) -> R {
+    let kind_desc = match payload(vm, args[0]) {
+        Some(Native::SerialDescriptor { kind_desc, .. }) => *kind_desc,
+        _ => "Lkotlinx/serialization/descriptors/StructureKind$CLASS;",
+    };
+    let fr = crate::vm::FieldRef {
+        class_desc: vm.intern(kind_desc),
+        name: vm.intern("INSTANCE"),
+        ty: vm.intern(kind_desc),
+    };
+    vm.static_field_get(fr).map_err(nat_fatal)
+}
+fn enum_descriptor_get_kind(vm: &mut Vm, _args: &[JValue]) -> R {
+    let fr = crate::vm::FieldRef {
+        class_desc: vm.intern("Lkotlinx/serialization/descriptors/SerialKind$ENUM;"),
+        name: vm.intern("INSTANCE"),
+        ty: vm.intern("Lkotlinx/serialization/descriptors/SerialKind$ENUM;"),
+    };
+    vm.static_field_get(fr).map_err(nat_fatal)
+}
+// wasm: SerialDescriptor.getElementDescriptor(index) via owning serializer's childSerializers().
+fn descriptor_get_element_descriptor(vm: &mut Vm, args: &[JValue]) -> R {
+    let idx = int_of(vm, args[1]);
+    let owner = match payload(vm, args[0]) {
+        Some(Native::SerialDescriptor { owner, .. }) => *owner,
+        _ => JValue::Null,
+    };
+    let child_ser = match payload(vm, owner) {
+        Some(Native::ArrayListSerializer { child }) => *child,
+        Some(Native::LinkedHashMapSerializer { key, value }) => {
+            if idx == 0 { *key } else { *value }
+        }
+        _ => {
+            if let JValue::Obj(o) = owner {
+                let mref = MethodRef {
+                    name: vm.intern("childSerializers"),
+                    sig: vm.intern("()[Lkotlinx/serialization/KSerializer;"),
+                    ret: 0,
+                    args: Vec::new(),
+                    class_desc: 0,
+                };
+                let target = vm
+                    .resolve_target(InvokeKind::Interface, &mref, Some(o), 0)
+                    .map_err(nat_fatal)?;
+                let arr = vm.call_target(target, vec![owner]).map_err(nat_fatal)?;
+                match payload(vm, arr) {
+                    Some(Native::Array(ArrayData::Obj(items))) if idx >= 0 => items
+                        .get(idx as usize)
+                        .copied()
+                        .unwrap_or(JValue::Null),
+                    _ => JValue::Null,
+                }
+            } else {
+                JValue::Null
+            }
+        }
+    };
+    let JValue::Obj(o) = child_ser else {
+        return Err(ioobe(vm, idx));
+    };
+    let mref = MethodRef {
+        name: vm.intern("getDescriptor"),
+        sig: vm.intern("()Lkotlinx/serialization/descriptors/SerialDescriptor;"),
+        ret: 0,
+        args: Vec::new(),
+        class_desc: 0,
+    };
+    let target = vm
+        .resolve_target(InvokeKind::Interface, &mref, Some(o), 0)
+        .map_err(nat_fatal)?;
+    vm.call_target(target, vec![child_ser]).map_err(nat_fatal)
+}
+fn primitive_serializer_descriptor(vm: &mut Vm, args: &[JValue]) -> R {
+    let Some(Native::PrimitiveSerializer(kind)) = payload(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    let (name, kind_desc) = match kind {
+        PrimitiveSerializerKind::String => (
+            "kotlin.String",
+            "Lkotlinx/serialization/descriptors/PrimitiveKind$STRING;",
+        ),
+        PrimitiveSerializerKind::Int => {
+            let cls = match args[0] {
+                JValue::Obj(id) => vm.str_of(vm.classes[vm.arena.objects[id as usize].class as usize].descriptor),
+                _ => "",
+            };
+            if cls.contains("BooleanSerializer") {
+                ("kotlin.Boolean", "Lkotlinx/serialization/descriptors/PrimitiveKind$BOOLEAN;")
+            } else {
+                ("kotlin.Int", "Lkotlinx/serialization/descriptors/PrimitiveKind$INT;")
+            }
+        }
+        PrimitiveSerializerKind::Long => (
+            "kotlin.Long",
+            "Lkotlinx/serialization/descriptors/PrimitiveKind$LONG;",
+        ),
+        PrimitiveSerializerKind::Float => (
+            "kotlin.Float",
+            "Lkotlinx/serialization/descriptors/PrimitiveKind$FLOAT;",
+        ),
+        PrimitiveSerializerKind::Double => (
+            "kotlin.Double",
+            "Lkotlinx/serialization/descriptors/PrimitiveKind$DOUBLE;",
+        ),
+    };
+    alloc(
+        vm,
+        "Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;",
+        Native::SerialDescriptor {
+            name: name.into(),
+            elements: Vec::new(),
+            element_annotations: Vec::new(),
+            kind_desc,
+            owner: args[0],
+        },
+    )
+}
+// wasm: additional SerialDescriptor query methods used by ProtoBuf/custom decoders.
+fn descriptor_get_element_annotations(vm: &mut Vm, args: &[JValue]) -> R {
+    let idx = int_of(vm, args[1]);
+    let items = match payload(vm, args[0]) {
+        Some(Native::SerialDescriptor {
+            element_annotations,
+            ..
+        }) if idx >= 0 => element_annotations
+            .get(idx as usize)
+            .cloned()
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    list_alloc(vm, items)
+}
+fn descriptor_get_annotations(vm: &mut Vm, _args: &[JValue]) -> R {
+    list_alloc(vm, Vec::new())
+}
+fn descriptor_get_element_index(vm: &mut Vm, args: &[JValue]) -> R {
+    let name = jstr(vm, args[1])?;
+    let idx = match payload(vm, args[0]) {
+        Some(Native::SerialDescriptor { elements, .. }) => elements
+            .iter()
+            .position(|e| e == &name)
+            .map(|i| i as i32)
+            .unwrap_or(-3),
+        _ => -3,
+    };
+    Ok(JValue::Int(idx))
+}
+fn descriptor_false(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Int(0))
 }
 
 fn object_members(vm: &Vm, element: JValue) -> Vec<(String, JsonVal)> {
@@ -651,33 +897,50 @@ fn run_serializer(vm: &mut Vm, serializer: JValue, element: JValue, module: Opti
                 Some(Native::Json(value)) => value.clone(),
                 _ => JsonVal::Null,
             };
-            return Ok(match kind {
-                PrimitiveSerializerKind::String => new_str(vm, &jsonval_to_string(&value)),
-                PrimitiveSerializerKind::Int => JValue::Int(match value {
-                    JsonVal::Int(v) => v as i32,
-                    JsonVal::Double(v) => v as i32,
-                    JsonVal::Str(v) => v.parse().unwrap_or_default(),
-                    _ => 0,
-                }),
-                PrimitiveSerializerKind::Long => JValue::Long(match value {
-                    JsonVal::Int(v) => v,
-                    JsonVal::Double(v) => v as i64,
-                    JsonVal::Str(v) => v.parse().unwrap_or_default(),
-                    _ => 0,
-                }),
-                PrimitiveSerializerKind::Float => JValue::Float(match value {
-                    JsonVal::Int(v) => v as f32,
-                    JsonVal::Double(v) => v as f32,
-                    JsonVal::Str(v) => v.parse().unwrap_or_default(),
-                    _ => 0.0,
-                }),
-                PrimitiveSerializerKind::Double => JValue::Double(match value {
-                    JsonVal::Int(v) => v as f64,
-                    JsonVal::Double(v) => v,
-                    JsonVal::Str(v) => v.parse().unwrap_or_default(),
-                    _ => 0.0,
-                }),
-            });
+            // wasm: PrimitiveSerializer returns Object; box primitives so callers can invoke Number.*Value().
+            return match kind {
+                PrimitiveSerializerKind::String => Ok(new_str(vm, &jsonval_to_string(&value))),
+                PrimitiveSerializerKind::Int => alloc(
+                    vm,
+                    "Ljava/lang/Integer;",
+                    Native::IntBox(match value {
+                        JsonVal::Int(v) => v as i32,
+                        JsonVal::Double(v) => v as i32,
+                        JsonVal::Str(v) => v.parse().unwrap_or_default(),
+                        _ => 0,
+                    }),
+                ),
+                PrimitiveSerializerKind::Long => alloc(
+                    vm,
+                    "Ljava/lang/Long;",
+                    Native::LongBox(match value {
+                        JsonVal::Int(v) => v,
+                        JsonVal::Double(v) => v as i64,
+                        JsonVal::Str(v) => v.parse().unwrap_or_default(),
+                        _ => 0,
+                    }),
+                ),
+                PrimitiveSerializerKind::Float => alloc(
+                    vm,
+                    "Ljava/lang/Float;",
+                    Native::FloatBox(match value {
+                        JsonVal::Int(v) => v as f32,
+                        JsonVal::Double(v) => v as f32,
+                        JsonVal::Str(v) => v.parse().unwrap_or_default(),
+                        _ => 0.0,
+                    }),
+                ),
+                PrimitiveSerializerKind::Double => alloc(
+                    vm,
+                    "Ljava/lang/Double;",
+                    Native::DoubleBox(match value {
+                        JsonVal::Int(v) => v as f64,
+                        JsonVal::Double(v) => v,
+                        JsonVal::Str(v) => v.parse().unwrap_or_default(),
+                        _ => 0.0,
+                    }),
+                ),
+            };
         }
         Some(Native::ArrayListSerializer { child }) => *child,
         Some(Native::LinkedHashMapSerializer { value, .. }) => {
@@ -1369,6 +1632,125 @@ pub(crate) fn lazy_int_array_serializer(vm: &mut Vm) -> JValue {
     .unwrap_or(JValue::Null)
 }
 
+// wasm: ByteArraySerializer singleton & descriptor/deserialize.
+pub(crate) fn lazy_byte_array_serializer(vm: &mut Vm) -> JValue {
+    alloc(
+        vm,
+        "Lkotlinx/serialization/internal/ByteArraySerializer;",
+        Native::Opaque,
+    )
+    .unwrap_or(JValue::Null)
+}
+fn byte_array_serializer_of(vm: &mut Vm, _args: &[JValue]) -> R {
+    let fr = crate::vm::FieldRef {
+        class_desc: vm.intern("Lkotlinx/serialization/internal/ByteArraySerializer;"),
+        name: vm.intern("INSTANCE"),
+        ty: vm.intern("Lkotlinx/serialization/internal/ByteArraySerializer;"),
+    };
+    vm.static_field_get(fr).map_err(nat_fatal)
+}
+fn byte_array_serializer_descriptor(vm: &mut Vm, args: &[JValue]) -> R {
+    alloc(
+        vm,
+        "Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;",
+        Native::SerialDescriptor {
+            name: "kotlin.ByteArray".into(),
+            elements: vec!["element".into()],
+            element_annotations: vec![Vec::new()],
+            kind_desc: "Lkotlinx/serialization/descriptors/StructureKind$LIST;",
+            owner: args[0],
+        },
+    )
+}
+fn byte_array_serializer_deserialize(vm: &mut Vm, args: &[JValue]) -> R {
+    let decoder = args[1];
+    let desc = byte_array_serializer_descriptor(vm, &[args[0]])?;
+    let JValue::Obj(dec_obj) = decoder else {
+        return Err(npe(vm));
+    };
+    let begin_ref = MethodRef {
+        name: vm.intern("beginStructure"),
+        sig: vm.intern("(Lkotlinx/serialization/descriptors/SerialDescriptor;)Lkotlinx/serialization/encoding/CompositeDecoder;"),
+        ret: 0,
+        args: Vec::new(),
+        class_desc: 0,
+    };
+    let target = vm.resolve_target(InvokeKind::Interface, &begin_ref, Some(dec_obj), 0).map_err(nat_fatal)?;
+    let comp = vm.call_target(target, vec![decoder, desc]).map_err(nat_fatal)?;
+    let JValue::Obj(comp_obj) = comp else {
+        return Err(npe(vm));
+    };
+    let idx_ref = MethodRef {
+        name: vm.intern("decodeElementIndex"),
+        sig: vm.intern("(Lkotlinx/serialization/descriptors/SerialDescriptor;)I"),
+        ret: 0,
+        args: Vec::new(),
+        class_desc: 0,
+    };
+    let byte_ref = MethodRef {
+        name: vm.intern("decodeByteElement"),
+        sig: vm.intern("(Lkotlinx/serialization/descriptors/SerialDescriptor;I)B"),
+        ret: 0,
+        args: Vec::new(),
+        class_desc: 0,
+    };
+    let mut out: Vec<i8> = Vec::new();
+    loop {
+        let t = vm.resolve_target(InvokeKind::Interface, &idx_ref, Some(comp_obj), 0).map_err(nat_fatal)?;
+        let raw_idx = vm.call_target(t, vec![comp, desc]).map_err(nat_fatal)?;
+        let idx = int_of(vm, raw_idx);
+        if idx == -1 {
+            break;
+        }
+        let bt = vm.resolve_target(InvokeKind::Interface, &byte_ref, Some(comp_obj), 0).map_err(nat_fatal)?;
+        let raw_b = vm.call_target(bt, vec![comp, desc, JValue::Int(idx)]).map_err(nat_fatal)?;
+        let b = int_of(vm, raw_b);
+        out.push(b as i8);
+    }
+    let end_ref = MethodRef {
+        name: vm.intern("endStructure"),
+        sig: vm.intern("(Lkotlinx/serialization/descriptors/SerialDescriptor;)V"),
+        ret: 0,
+        args: Vec::new(),
+        class_desc: 0,
+    };
+    let et = vm.resolve_target(InvokeKind::Interface, &end_ref, Some(comp_obj), 0).map_err(nat_fatal)?;
+    let _ = vm.call_target(et, vec![comp, desc]).map_err(nat_fatal)?;
+    alloc(vm, "[B", Native::Array(ArrayData::Byte(out)))
+}
+// wasm: AbstractCollectionSerializer.merge(Decoder, previous) used by ProtoBuf for repeated fields.
+fn abstract_collection_serializer_merge(vm: &mut Vm, args: &[JValue]) -> R {
+    let ser = args[0];
+    let dec = args[1];
+    let prev = args[2];
+    match payload(vm, ser) {
+        Some(Native::ArrayListSerializer { .. }) => {
+            let mut merged = if prev.is_null_ref() {
+                Vec::new()
+            } else {
+                coll_elems(vm, prev).unwrap_or_default()
+            };
+            let next = array_list_serializer_deserialize(vm, &[ser, dec])?;
+            merged.extend(coll_elems(vm, next).unwrap_or_default());
+            list_alloc(vm, merged)
+        }
+        _ => {
+            let next = byte_array_serializer_deserialize(vm, &[ser, dec])?;
+            if prev.is_null_ref() {
+                return Ok(next);
+            }
+            let mut merged = match payload(vm, prev) {
+                Some(Native::Array(ArrayData::Byte(b))) => b.clone(),
+                _ => Vec::new(),
+            };
+            if let Some(Native::Array(ArrayData::Byte(b))) = payload(vm, next) {
+                merged.extend_from_slice(b);
+            }
+            alloc(vm, "[B", Native::Array(ArrayData::Byte(merged)))
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // descriptors
 // ---------------------------------------------------------------------------
@@ -1376,10 +1758,13 @@ pub(crate) fn lazy_int_array_serializer(vm: &mut Vm) -> JValue {
 /// `PluginGeneratedSerialDescriptor.<init>(serialName, previous, count)`.
 pub(crate) fn descriptor_init(vm: &mut Vm, args: &[JValue]) -> R {
     let name = jstr(vm, args[1]).unwrap_or_default();
+    let owner = args.get(2).copied().unwrap_or(JValue::Null);
     let desc = Native::SerialDescriptor {
         name,
         elements: Vec::new(),
         element_annotations: Vec::new(),
+        kind_desc: "Lkotlinx/serialization/descriptors/StructureKind$CLASS;",
+        owner,
     };
     let Some(n) = payload_mut(vm, args[0]) else {
         return Err(npe(vm));
@@ -1467,7 +1852,66 @@ pub(crate) fn array_list_serializer_deserialize(vm: &mut Vm, args: &[JValue]) ->
             };
             crate::vm::native::proto::proto_list_deserialize(vm, args[1], child)
         }
-        _ => return Err(npe(vm)),
+        // wasm: generic kotlinx.serialization Decoder path (e.g. bundled ProtoBuf AbstractDecoder).
+        _ => {
+            let child = match payload(vm, args[0]) {
+                Some(Native::ArrayListSerializer { child }) => *child,
+                _ => return Err(npe(vm)),
+            };
+            let decoder = args[1];
+            let JValue::Obj(dec_obj) = decoder else {
+                return Err(npe(vm));
+            };
+            let desc = array_list_serializer_descriptor(vm, &[args[0]])?;
+            let begin_ref = MethodRef {
+                name: vm.intern("beginStructure"),
+                sig: vm.intern("(Lkotlinx/serialization/descriptors/SerialDescriptor;)Lkotlinx/serialization/encoding/CompositeDecoder;"),
+                ret: 0,
+                args: Vec::new(),
+                class_desc: 0,
+            };
+            let target = vm.resolve_target(InvokeKind::Interface, &begin_ref, Some(dec_obj), 0).map_err(nat_fatal)?;
+            let comp = vm.call_target(target, vec![decoder, desc]).map_err(nat_fatal)?;
+            let JValue::Obj(comp_obj) = comp else {
+                return Err(npe(vm));
+            };
+            let idx_ref = MethodRef {
+                name: vm.intern("decodeElementIndex"),
+                sig: vm.intern("(Lkotlinx/serialization/descriptors/SerialDescriptor;)I"),
+                ret: 0,
+                args: Vec::new(),
+                class_desc: 0,
+            };
+            let elem_ref = MethodRef {
+                name: vm.intern("decodeSerializableElement"),
+                sig: vm.intern("(Lkotlinx/serialization/descriptors/SerialDescriptor;ILkotlinx/serialization/DeserializationStrategy;Ljava/lang/Object;)Ljava/lang/Object;"),
+                ret: 0,
+                args: Vec::new(),
+                class_desc: 0,
+            };
+            let mut items = Vec::new();
+            loop {
+                let t = vm.resolve_target(InvokeKind::Interface, &idx_ref, Some(comp_obj), 0).map_err(nat_fatal)?;
+                let raw_idx = vm.call_target(t, vec![comp, desc]).map_err(nat_fatal)?;
+                let idx = int_of(vm, raw_idx);
+                if idx == -1 {
+                    break;
+                }
+                let et = vm.resolve_target(InvokeKind::Interface, &elem_ref, Some(comp_obj), 0).map_err(nat_fatal)?;
+                let elem = vm.call_target(et, vec![comp, desc, JValue::Int(idx), child, JValue::Null]).map_err(nat_fatal)?;
+                items.push(elem);
+            }
+            let end_ref = MethodRef {
+                name: vm.intern("endStructure"),
+                sig: vm.intern("(Lkotlinx/serialization/descriptors/SerialDescriptor;)V"),
+                ret: 0,
+                args: Vec::new(),
+                class_desc: 0,
+            };
+            let et = vm.resolve_target(InvokeKind::Interface, &end_ref, Some(comp_obj), 0).map_err(nat_fatal)?;
+            let _ = vm.call_target(et, vec![comp, desc]).map_err(nat_fatal)?;
+            list_alloc(vm, items)
+        }
     }
 }
 
@@ -1642,7 +2086,7 @@ fn polymorphic_serializer_init(vm: &mut Vm, args: &[JValue]) -> R {
 }
 
 /// `PolymorphicSerializer.getDescriptor()` — minimal base descriptor.
-fn polymorphic_get_descriptor(vm: &mut Vm, _args: &[JValue]) -> R {
+fn polymorphic_get_descriptor(vm: &mut Vm, args: &[JValue]) -> R {
     alloc(
         vm,
         "Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;",
@@ -1650,6 +2094,8 @@ fn polymorphic_get_descriptor(vm: &mut Vm, _args: &[JValue]) -> R {
             name: "Polymorphic".into(),
             elements: Vec::new(),
             element_annotations: Vec::new(),
+            kind_desc: "Lkotlinx/serialization/descriptors/StructureKind$CLASS;",
+            owner: args[0],
         },
     )
 }
@@ -1814,6 +2260,8 @@ fn primitive_serial_descriptor(vm: &mut Vm, args: &[JValue]) -> R {
             name,
             elements: Vec::new(),
             element_annotations: Vec::new(),
+            kind_desc: "Lkotlinx/serialization/descriptors/PrimitiveKind$STRING;",
+            owner: JValue::Null,
         },
     )
 }
@@ -1829,6 +2277,8 @@ fn build_class_descriptor_default(vm: &mut Vm, args: &[JValue]) -> R {
             name,
             elements: Vec::new(),
             element_annotations: Vec::new(),
+            kind_desc: "Lkotlinx/serialization/descriptors/StructureKind$CLASS;",
+            owner: JValue::Null,
         },
     )
 }
@@ -1836,6 +2286,7 @@ fn build_class_descriptor_default(vm: &mut Vm, args: &[JValue]) -> R {
 /// `InlineClassDescriptor.<init>(name, serializer)`.
 fn inline_class_descriptor_init(vm: &mut Vm, args: &[JValue]) -> R {
     let name = jstr(vm, args[1]).unwrap_or_default();
+    let owner = args.get(2).copied().unwrap_or(JValue::Null);
     let Some(JValue::Obj(this)) = args.first().copied() else {
         return Err(npe(vm));
     };
@@ -1843,6 +2294,8 @@ fn inline_class_descriptor_init(vm: &mut Vm, args: &[JValue]) -> R {
         name,
         elements: Vec::new(),
         element_annotations: Vec::new(),
+        kind_desc: "Lkotlinx/serialization/descriptors/StructureKind$CLASS;",
+        owner,
     });
     Ok(JValue::Null)
 }
@@ -1858,14 +2311,16 @@ fn inline_class_descriptor_add_element(vm: &mut Vm, args: &[JValue]) -> R {
 }
 
 /// `ArrayListSerializer.getDescriptor()`.
-fn array_list_serializer_descriptor(vm: &mut Vm, _args: &[JValue]) -> R {
+fn array_list_serializer_descriptor(vm: &mut Vm, args: &[JValue]) -> R {
     alloc(
         vm,
         "Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;",
         Native::SerialDescriptor {
             name: "kotlin.collections.ArrayList".into(),
-            elements: Vec::new(),
-            element_annotations: Vec::new(),
+            elements: vec!["element".into()],
+            element_annotations: vec![Vec::new()],
+            kind_desc: "Lkotlinx/serialization/descriptors/StructureKind$LIST;",
+            owner: args[0],
         },
     )
 }
@@ -2080,14 +2535,16 @@ fn linked_hash_map_deserialize(vm: &mut Vm, args: &[JValue]) -> R {
     decode_map(vm, args[0], element, module, *value)
 }
 
-fn linked_hash_map_descriptor(vm: &mut Vm, _args: &[JValue]) -> R {
+fn linked_hash_map_descriptor(vm: &mut Vm, args: &[JValue]) -> R {
     alloc(
         vm,
         "Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;",
         Native::SerialDescriptor {
             name: "LinkedHashMap".into(),
-            elements: Vec::new(),
-            element_annotations: Vec::new(),
+            elements: vec!["key".into(), "value".into()],
+            element_annotations: vec![Vec::new(), Vec::new()],
+            kind_desc: "Lkotlinx/serialization/descriptors/StructureKind$MAP;",
+            owner: args[0],
         },
     )
 }
@@ -2104,35 +2561,100 @@ fn primitive_serializer_deserialize(vm: &mut Vm, args: &[JValue]) -> R {
             Some(Native::Json(value)) => value.clone(),
             _ => JsonVal::Null,
         },
-        _ => JsonVal::Null,
+        // wasm: generic kotlinx.serialization Decoder path (e.g. bundled ProtoBuf AbstractDecoder).
+        _ => {
+            let JValue::Obj(dec_obj) = args[1] else {
+                return Err(npe(vm));
+            };
+            let is_bool = match args[0] {
+                JValue::Obj(id) => vm
+                    .str_of(vm.classes[vm.arena.objects[id as usize].class as usize].descriptor)
+                    .contains("BooleanSerializer"),
+                _ => false,
+            };
+            let (mname, msig) = match kind {
+                PrimitiveSerializerKind::String => ("decodeString", "()Ljava/lang/String;"),
+                PrimitiveSerializerKind::Int if is_bool => ("decodeBoolean", "()Z"),
+                PrimitiveSerializerKind::Int => ("decodeInt", "()I"),
+                PrimitiveSerializerKind::Long => ("decodeLong", "()J"),
+                PrimitiveSerializerKind::Float => ("decodeFloat", "()F"),
+                PrimitiveSerializerKind::Double => ("decodeDouble", "()D"),
+            };
+            let mref = MethodRef {
+                name: vm.intern(mname),
+                sig: vm.intern(msig),
+                ret: 0,
+                args: Vec::new(),
+                class_desc: 0,
+            };
+            let t = vm
+                .resolve_target(InvokeKind::Interface, &mref, Some(dec_obj), 0)
+                .map_err(nat_fatal)?;
+            let raw = vm.call_target(t, vec![args[1]]).map_err(nat_fatal)?;
+            return match kind {
+                PrimitiveSerializerKind::String => Ok(raw),
+                PrimitiveSerializerKind::Int if is_bool => {
+                    alloc(vm, "Ljava/lang/Boolean;", Native::BoolBox(int_of(vm, raw) != 0))
+                }
+                PrimitiveSerializerKind::Int => {
+                    alloc(vm, "Ljava/lang/Integer;", Native::IntBox(int_of(vm, raw)))
+                }
+                PrimitiveSerializerKind::Long => {
+                    alloc(vm, "Ljava/lang/Long;", Native::LongBox(long_of(vm, raw)))
+                }
+                PrimitiveSerializerKind::Float => {
+                    alloc(vm, "Ljava/lang/Float;", Native::FloatBox(float_of(vm, raw)))
+                }
+                PrimitiveSerializerKind::Double => {
+                    alloc(vm, "Ljava/lang/Double;", Native::DoubleBox(double_of(vm, raw)))
+                }
+            };
+        }
     };
-    Ok(match kind {
-        PrimitiveSerializerKind::String => new_str(vm, &jsonval_to_string(&value)),
-        PrimitiveSerializerKind::Int => JValue::Int(match value {
-            JsonVal::Int(v) => v as i32,
-            JsonVal::Double(v) => v as i32,
-            JsonVal::Str(v) => v.parse().unwrap_or_default(),
-            _ => 0,
-        }),
-        PrimitiveSerializerKind::Long => JValue::Long(match value {
-            JsonVal::Int(v) => v,
-            JsonVal::Double(v) => v as i64,
-            JsonVal::Str(v) => v.parse().unwrap_or_default(),
-            _ => 0,
-        }),
-        PrimitiveSerializerKind::Float => JValue::Float(match value {
-            JsonVal::Int(v) => v as f32,
-            JsonVal::Double(v) => v as f32,
-            JsonVal::Str(v) => v.parse().unwrap_or_default(),
-            _ => 0.0,
-        }),
-        PrimitiveSerializerKind::Double => JValue::Double(match value {
-            JsonVal::Int(v) => v as f64,
-            JsonVal::Double(v) => v,
-            JsonVal::Str(v) => v.parse().unwrap_or_default(),
-            _ => 0.0,
-        }),
-    })
+    // wasm: PrimitiveSerializer.deserialize returns Object; box primitives so callers can invoke Number.*Value().
+    match kind {
+        PrimitiveSerializerKind::String => Ok(new_str(vm, &jsonval_to_string(&value))),
+        PrimitiveSerializerKind::Int => alloc(
+            vm,
+            "Ljava/lang/Integer;",
+            Native::IntBox(match value {
+                JsonVal::Int(v) => v as i32,
+                JsonVal::Double(v) => v as i32,
+                JsonVal::Str(v) => v.parse().unwrap_or_default(),
+                _ => 0,
+            }),
+        ),
+        PrimitiveSerializerKind::Long => alloc(
+            vm,
+            "Ljava/lang/Long;",
+            Native::LongBox(match value {
+                JsonVal::Int(v) => v,
+                JsonVal::Double(v) => v as i64,
+                JsonVal::Str(v) => v.parse().unwrap_or_default(),
+                _ => 0,
+            }),
+        ),
+        PrimitiveSerializerKind::Float => alloc(
+            vm,
+            "Ljava/lang/Float;",
+            Native::FloatBox(match value {
+                JsonVal::Int(v) => v as f32,
+                JsonVal::Double(v) => v as f32,
+                JsonVal::Str(v) => v.parse().unwrap_or_default(),
+                _ => 0.0,
+            }),
+        ),
+        PrimitiveSerializerKind::Double => alloc(
+            vm,
+            "Ljava/lang/Double;",
+            Native::DoubleBox(match value {
+                JsonVal::Int(v) => v as f64,
+                JsonVal::Double(v) => v,
+                JsonVal::Str(v) => v.parse().unwrap_or_default(),
+                _ => 0.0,
+            }),
+        ),
+    }
 }
 
 /// `EnumSerializer.getDescriptor()` — the enum serial name.
@@ -2148,6 +2670,8 @@ fn enum_serializer_descriptor(vm: &mut Vm, args: &[JValue]) -> R {
             name: String::new(),
             elements: names,
             element_annotations: Vec::new(),
+            kind_desc: "Lkotlinx/serialization/descriptors/SerialKind$ENUM;",
+            owner: args[0],
         },
     )
 }
@@ -2897,6 +3421,31 @@ pub(crate) const SERIALIZATION_TABLE: &[NativeEntry] = &[
         descriptor_get_serial_name
     ),
     ne!("Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;", "pushAnnotation", "(Ljava/lang/annotation/Annotation;)V", true, descriptor_push_annotation),
+    // wasm: SerialDescriptor.getKind() and metadata queries for ProtoBuf/custom decoders.
+    ne!("Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;", "getKind", "()Lkotlinx/serialization/descriptors/SerialKind;", true, descriptor_get_kind),
+    ne!("Lkotlinx/serialization/descriptors/SerialDescriptor;", "getKind", "()Lkotlinx/serialization/descriptors/SerialKind;", true, descriptor_get_kind),
+    ne!("Lkotlinx/serialization/internal/EnumDescriptor;", "getKind", "()Lkotlinx/serialization/descriptors/SerialKind;", true, enum_descriptor_get_kind),
+    ne!("Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;", "getElementAnnotations", "(I)Ljava/util/List;", true, descriptor_get_element_annotations),
+    ne!("Lkotlinx/serialization/descriptors/SerialDescriptor;", "getElementAnnotations", "(I)Ljava/util/List;", true, descriptor_get_element_annotations),
+    ne!("Lkotlinx/serialization/internal/EnumDescriptor;", "getElementAnnotations", "(I)Ljava/util/List;", true, descriptor_get_element_annotations),
+    ne!("Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;", "getAnnotations", "()Ljava/util/List;", true, descriptor_get_annotations),
+    ne!("Lkotlinx/serialization/descriptors/SerialDescriptor;", "getAnnotations", "()Ljava/util/List;", true, descriptor_get_annotations),
+    ne!("Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;", "getElementIndex", "(Ljava/lang/String;)I", true, descriptor_get_element_index),
+    ne!("Lkotlinx/serialization/descriptors/SerialDescriptor;", "getElementIndex", "(Ljava/lang/String;)I", true, descriptor_get_element_index),
+    ne!("Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;", "isElementOptional", "(I)Z", true, descriptor_false),
+    ne!("Lkotlinx/serialization/descriptors/SerialDescriptor;", "isElementOptional", "(I)Z", true, descriptor_false),
+    ne!("Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;", "isNullable", "()Z", true, descriptor_false),
+    ne!("Lkotlinx/serialization/descriptors/SerialDescriptor;", "isNullable", "()Z", true, descriptor_false),
+    ne!("Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;", "isInline", "()Z", true, descriptor_false),
+    ne!("Lkotlinx/serialization/descriptors/SerialDescriptor;", "isInline", "()Z", true, descriptor_false),
+    ne!("Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;", "getElementDescriptor", "(I)Lkotlinx/serialization/descriptors/SerialDescriptor;", true, descriptor_get_element_descriptor),
+    ne!("Lkotlinx/serialization/descriptors/SerialDescriptor;", "getElementDescriptor", "(I)Lkotlinx/serialization/descriptors/SerialDescriptor;", true, descriptor_get_element_descriptor),
+    ne!("Lkotlinx/serialization/internal/StringSerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, primitive_serializer_descriptor),
+    ne!("Lkotlinx/serialization/internal/IntSerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, primitive_serializer_descriptor),
+    ne!("Lkotlinx/serialization/internal/LongSerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, primitive_serializer_descriptor),
+    ne!("Lkotlinx/serialization/internal/BooleanSerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, primitive_serializer_descriptor),
+    ne!("Lkotlinx/serialization/internal/FloatSerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, primitive_serializer_descriptor),
+    ne!("Lkotlinx/serialization/internal/DoubleSerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, primitive_serializer_descriptor),
     ne!(
         "Lkotlinx/serialization/internal/ArrayListSerializer;",
         "<init>",
@@ -2981,6 +3530,9 @@ pub(crate) const SERIALIZATION_TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/serialization/modules/SerializersModuleBuilder;", "build", "()Lkotlinx/serialization/modules/SerializersModule;", true, serializers_module_builder_build),
     ne!("Lkotlinx/serialization/modules/SerializersModuleBuilder;", "contextual", "(Lkotlin/reflect/KClass;Lkotlin/jvm/functions/Function1;)V", true, json_builder_set),
     ne!("Lkotlinx/serialization/modules/SerializersModuleKt;", "plus", "(Lkotlinx/serialization/modules/SerializersModule;Lkotlinx/serialization/modules/SerializersModule;)Lkotlinx/serialization/modules/SerializersModule;", false, serializers_module_plus),
+    // wasm: EmptySerializersModule() used by ProtoBuf default constructor.
+    ne!("Lkotlinx/serialization/modules/SerializersModuleBuildersKt;", "EmptySerializersModule", "()Lkotlinx/serialization/modules/SerializersModule;", false, serializers_module_alloc),
+    ne!("Lkotlinx/serialization/modules/SerializersModuleKt;", "getEmptySerializersModule", "()Lkotlinx/serialization/modules/SerializersModule;", false, serializers_module_alloc),
     ne!("Lkotlinx/serialization/internal/InlineClassDescriptor;", "<init>", "(Ljava/lang/String;Lkotlinx/serialization/internal/GeneratedSerializer;)V", true, inline_class_descriptor_init),
     ne!("Lkotlinx/serialization/internal/InlineClassDescriptor;", "addElement", "(Ljava/lang/String;Z)V", true, inline_class_descriptor_add_element),
     ne!("Lkotlinx/serialization/PolymorphicSerializer;", "<init>", "(Lkotlin/reflect/KClass;[Ljava/lang/annotation/Annotation;)V", true, polymorphic_serializer_init),
@@ -3014,8 +3566,109 @@ pub(crate) const SERIALIZATION_TABLE: &[NativeEntry] = &[
     ne!("Lkotlinx/serialization/builtins/BuiltinSerializersKt;", "ListSerializer", "(Lkotlinx/serialization/KSerializer;)Lkotlinx/serialization/KSerializer;", false, list_serializer),
     ne!("Lkotlinx/serialization/builtins/BuiltinSerializersKt;", "MapSerializer", "(Lkotlinx/serialization/KSerializer;Lkotlinx/serialization/KSerializer;)Lkotlinx/serialization/KSerializer;", false, map_serializer),
     ne!("Lkotlinx/serialization/builtins/BuiltinSerializersKt;", "serializer", "(Lkotlin/jvm/internal/StringCompanionObject;)Lkotlinx/serialization/KSerializer;", false, string_serializer_of),
+    // wasm: ByteArraySerializer builtin & methods (MANGA Plus ProtoBuf etc.).
+    ne!("Lkotlinx/serialization/builtins/BuiltinSerializersKt;", "ByteArraySerializer", "()Lkotlinx/serialization/KSerializer;", false, byte_array_serializer_of),
+    ne!("Lkotlinx/serialization/internal/ByteArraySerializer;", "getDescriptor", "()Lkotlinx/serialization/descriptors/SerialDescriptor;", true, byte_array_serializer_descriptor),
+    ne!("Lkotlinx/serialization/internal/ByteArraySerializer;", "deserialize", "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;", true, byte_array_serializer_deserialize),
+    ne!("Lkotlinx/serialization/internal/AbstractCollectionSerializer;", "merge", "(Lkotlinx/serialization/encoding/Decoder;Ljava/lang/Object;)Ljava/lang/Object;", true, abstract_collection_serializer_merge),
+    ne!("Lkotlinx/serialization/protobuf/ProtoIntegerType;", "values", "()[Lkotlinx/serialization/protobuf/ProtoIntegerType;", false, proto_int_values),
     ne!("Lkotlinx/serialization/internal/PluginGeneratedSerialDescriptor;", "pushClassAnnotation", "(Ljava/lang/annotation/Annotation;)V", true, descriptor_push_annotation),
+    // wasm: kotlinx.serialization.encoding.AbstractDecoder defaults (for custom decoders like MANGA Plus Protobuf).
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "<init>", "()V", true, abstract_decoder_init),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeSerializableValue", "(Lkotlinx/serialization/DeserializationStrategy;)Ljava/lang/Object;", true, abstract_decoder_decode_serializable_value),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeSerializableValue", "(Lkotlinx/serialization/DeserializationStrategy;Ljava/lang/Object;)Ljava/lang/Object;", true, abstract_decoder_decode_serializable_value),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "beginStructure", "(Lkotlinx/serialization/descriptors/SerialDescriptor;)Lkotlinx/serialization/encoding/CompositeDecoder;", true, abstract_decoder_begin_structure),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "endStructure", "(Lkotlinx/serialization/descriptors/SerialDescriptor;)V", true, abstract_decoder_end_structure),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeSequentially", "()Z", true, abstract_decoder_decode_sequentially),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeCollectionSize", "(Lkotlinx/serialization/descriptors/SerialDescriptor;)I", true, abstract_decoder_decode_collection_size),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeNotNullMark", "()Z", true, abstract_decoder_decode_not_null_mark),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeNull", "()Ljava/lang/Void;", true, abstract_decoder_decode_null),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeBooleanElement", "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)Z", true, abstract_decoder_decode_boolean_elem),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeByteElement", "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)B", true, abstract_decoder_decode_byte_elem),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeShortElement", "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)S", true, abstract_decoder_decode_short_elem),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeIntElement", "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)I", true, abstract_decoder_decode_int_elem),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeLongElement", "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)J", true, abstract_decoder_decode_long_elem),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeFloatElement", "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)F", true, abstract_decoder_decode_float_elem),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeDoubleElement", "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)D", true, abstract_decoder_decode_double_elem),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeStringElement", "(Lkotlinx/serialization/descriptors/SerialDescriptor;I)Ljava/lang/String;", true, abstract_decoder_decode_string_elem),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeSerializableElement", "(Lkotlinx/serialization/descriptors/SerialDescriptor;ILkotlinx/serialization/DeserializationStrategy;Ljava/lang/Object;)Ljava/lang/Object;", true, abstract_decoder_decode_serializable_elem),
+    ne!("Lkotlinx/serialization/encoding/AbstractDecoder;", "decodeNullableSerializableElement", "(Lkotlinx/serialization/descriptors/SerialDescriptor;ILkotlinx/serialization/DeserializationStrategy;Ljava/lang/Object;)Ljava/lang/Object;", true, abstract_decoder_decode_nullable_serializable_elem),
+    ne!("Lkotlinx/serialization/encoding/AbstractEncoder;", "<init>", "()V", true, abstract_decoder_init),
 ];
+
+// wasm: AbstractDecoder default implementations per kotlinx.serialization.encoding.AbstractDecoder.
+fn abstract_decoder_init(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Null)
+}
+fn abstract_decoder_begin_structure(_vm: &mut Vm, args: &[JValue]) -> R {
+    Ok(args[0])
+}
+fn abstract_decoder_end_structure(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Null)
+}
+fn abstract_decoder_decode_sequentially(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Int(0))
+}
+fn abstract_decoder_decode_collection_size(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Int(-1))
+}
+fn abstract_decoder_decode_not_null_mark(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Int(1))
+}
+fn abstract_decoder_decode_null(_vm: &mut Vm, _args: &[JValue]) -> R {
+    Ok(JValue::Null)
+}
+fn abstract_decoder_decode_serializable_value(vm: &mut Vm, args: &[JValue]) -> R {
+    inv_virt(
+        vm,
+        args[1],
+        "deserialize",
+        "(Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;",
+        &[args[0]],
+    )
+}
+fn abstract_decoder_decode_boolean_elem(vm: &mut Vm, args: &[JValue]) -> R {
+    inv_virt(vm, args[0], "decodeBoolean", "()Z", &[])
+}
+fn abstract_decoder_decode_byte_elem(vm: &mut Vm, args: &[JValue]) -> R {
+    inv_virt(vm, args[0], "decodeByte", "()B", &[])
+}
+fn abstract_decoder_decode_short_elem(vm: &mut Vm, args: &[JValue]) -> R {
+    inv_virt(vm, args[0], "decodeShort", "()S", &[])
+}
+fn abstract_decoder_decode_int_elem(vm: &mut Vm, args: &[JValue]) -> R {
+    inv_virt(vm, args[0], "decodeInt", "()I", &[])
+}
+fn abstract_decoder_decode_long_elem(vm: &mut Vm, args: &[JValue]) -> R {
+    inv_virt(vm, args[0], "decodeLong", "()J", &[])
+}
+fn abstract_decoder_decode_float_elem(vm: &mut Vm, args: &[JValue]) -> R {
+    inv_virt(vm, args[0], "decodeFloat", "()F", &[])
+}
+fn abstract_decoder_decode_double_elem(vm: &mut Vm, args: &[JValue]) -> R {
+    inv_virt(vm, args[0], "decodeDouble", "()D", &[])
+}
+fn abstract_decoder_decode_string_elem(vm: &mut Vm, args: &[JValue]) -> R {
+    inv_virt(vm, args[0], "decodeString", "()Ljava/lang/String;", &[])
+}
+fn abstract_decoder_decode_serializable_elem(vm: &mut Vm, args: &[JValue]) -> R {
+    let prev = args.get(4).copied().unwrap_or(JValue::Null);
+    inv_virt(
+        vm,
+        args[0],
+        "decodeSerializableValue",
+        "(Lkotlinx/serialization/DeserializationStrategy;Ljava/lang/Object;)Ljava/lang/Object;",
+        &[args[3], prev],
+    )
+}
+fn abstract_decoder_decode_nullable_serializable_elem(vm: &mut Vm, args: &[JValue]) -> R {
+    let not_null = inv_virt(vm, args[0], "decodeNotNullMark", "()Z", &[])?;
+    if bool_of(vm, not_null) {
+        abstract_decoder_decode_serializable_elem(vm, args)
+    } else {
+        inv_virt(vm, args[0], "decodeNull", "()Ljava/lang/Void;", &[])
+    }
+}
 
 /// `UnknownFieldException.<init>(index)` — allocated but never thrown in the
 /// sequential decode path.
