@@ -562,6 +562,12 @@ fn both(k: &mut Keiyoushi, first: JvmError, second: JvmError) -> String {
 }
 
 fn do_popular(e: &mut Engine, src: &Source, page: i32) -> Result<dexvm::keiyoushi::MangaPages, String> {
+    if e.k.has_get_popular(src) {
+        return e
+            .k
+            .popular_coro(src, page)
+            .map_err(|er| e.k.describe_error(&er));
+    }
     match e.k.popular(src, page) {
         Ok(v) => Ok(v),
         Err(first) => match e.k.popular_coro(src, page) {
@@ -572,6 +578,12 @@ fn do_popular(e: &mut Engine, src: &Source, page: i32) -> Result<dexvm::keiyoush
 }
 
 fn do_latest(e: &mut Engine, src: &Source, page: i32) -> Result<dexvm::keiyoushi::MangaPages, String> {
+    if e.k.has_get_latest(src) {
+        return e
+            .k
+            .latest_coro(src, page)
+            .map_err(|er| e.k.describe_error(&er));
+    }
     match e.k.latest(src, page) {
         Ok(v) => Ok(v),
         Err(first) => match e.k.latest_coro(src, page) {
@@ -588,6 +600,12 @@ fn do_search(
     query: &str,
     filters: &[FilterState],
 ) -> Result<dexvm::keiyoushi::MangaPages, String> {
+    if e.k.has_get_search(src) {
+        return e
+            .k
+            .search_coro(src, page, query, filters)
+            .map_err(|er| e.k.describe_error(&er));
+    }
     match e.k.search(src, page, query, filters) {
         Ok(v) => Ok(v),
         Err(first) => match e.k.search_coro(src, page, query, filters) {
@@ -630,6 +648,12 @@ fn do_chapters(e: &mut Engine, src: &Source, m: &Manga) -> Result<Vec<Chapter>, 
 }
 
 fn do_pages(e: &mut Engine, src: &Source, c: &Chapter) -> Result<Vec<PageRef>, String> {
+    if e.k.has_get_pages(src) {
+        return e
+            .k
+            .pages_coro(src, c)
+            .map_err(|er| e.k.describe_error(&er));
+    }
     match e.k.pages(src, c) {
         Ok(v) => Ok(v),
         Err(first) => match e.k.pages_coro(src, c) {

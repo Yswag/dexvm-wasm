@@ -358,13 +358,16 @@ impl Keiyoushi {
     }
 
     pub fn popular(&mut self, src: &Source, page: i32) -> Result<MangaPages, JvmError> {
-        if let Some(mangas) = self.try_fetch_observable(
-            src,
-            "fetchPopularManga",
-            "(I)Lrx/Observable;",
-            &[JValue::Int(page)],
-        )? {
-            return self.manga_pages(mangas);
+        const FETCH_SIG: &str = "(I)Lrx/Observable;";
+        if self.has_dex_method(src, "fetchPopularManga", FETCH_SIG) {
+            if let Some(mangas) = self.try_fetch_observable(
+                src,
+                "fetchPopularManga",
+                FETCH_SIG,
+                &[JValue::Int(page)],
+            )? {
+                return self.manga_pages(mangas);
+            }
         }
         let req = self.ctx.invoke_on(
             src.inst,
@@ -383,13 +386,16 @@ impl Keiyoushi {
     }
 
     pub fn latest(&mut self, src: &Source, page: i32) -> Result<MangaPages, JvmError> {
-        if let Some(mangas) = self.try_fetch_observable(
-            src,
-            "fetchLatestUpdates",
-            "(I)Lrx/Observable;",
-            &[JValue::Int(page)],
-        )? {
-            return self.manga_pages(mangas);
+        const FETCH_SIG: &str = "(I)Lrx/Observable;";
+        if self.has_dex_method(src, "fetchLatestUpdates", FETCH_SIG) {
+            if let Some(mangas) = self.try_fetch_observable(
+                src,
+                "fetchLatestUpdates",
+                FETCH_SIG,
+                &[JValue::Int(page)],
+            )? {
+                return self.manga_pages(mangas);
+            }
         }
         let req = self.ctx.invoke_on(
             src.inst,
@@ -421,13 +427,17 @@ impl Keiyoushi {
 
         // Rx-style override (M+): fetchSearchManga emits the MangasPage
         // directly and the request/parse pair below is a stub.
-        if let Some(mangas) = self.try_fetch_observable(
-            src,
-            "fetchSearchManga",
-            "(ILjava/lang/String;Leu/kanade/tachiyomi/source/model/FilterList;)Lrx/Observable;",
-            &[JValue::Int(page), query_obj, flist],
-        )? {
-            return self.manga_pages(mangas);
+        const FETCH_SIG: &str =
+            "(ILjava/lang/String;Leu/kanade/tachiyomi/source/model/FilterList;)Lrx/Observable;";
+        if self.has_dex_method(src, "fetchSearchManga", FETCH_SIG) {
+            if let Some(mangas) = self.try_fetch_observable(
+                src,
+                "fetchSearchManga",
+                FETCH_SIG,
+                &[JValue::Int(page), query_obj, flist],
+            )? {
+                return self.manga_pages(mangas);
+            }
         }
 
         let req = self.ctx.invoke_on(
@@ -528,6 +538,42 @@ impl Keiyoushi {
             "(Leu/kanade/tachiyomi/source/model/SManga;Ljava/util/List;ZZLkotlin/coroutines/Continuation;)Ljava/lang/Object;";
         self.has_dex_method(src, "getMangaUpdate", SIG)
             || self.has_dex_method(src, "fetchMangaUpdate", SIG)
+    }
+
+    // wasm: true when the source implements suspend `getPopularManga` in DEX bytecode.
+    pub fn has_get_popular(&mut self, src: &Source) -> bool {
+        self.has_dex_method(
+            src,
+            "getPopularManga",
+            "(ILkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+        )
+    }
+
+    // wasm: true when the source implements suspend `getLatestUpdates` in DEX bytecode.
+    pub fn has_get_latest(&mut self, src: &Source) -> bool {
+        self.has_dex_method(
+            src,
+            "getLatestUpdates",
+            "(ILkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+        )
+    }
+
+    // wasm: true when the source implements suspend `getSearchManga` in DEX bytecode.
+    pub fn has_get_search(&mut self, src: &Source) -> bool {
+        self.has_dex_method(
+            src,
+            "getSearchManga",
+            "(ILjava/lang/String;Leu/kanade/tachiyomi/source/model/FilterList;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+        )
+    }
+
+    // wasm: true when the source implements suspend `getPageList` in DEX bytecode.
+    pub fn has_get_pages(&mut self, src: &Source) -> bool {
+        self.has_dex_method(
+            src,
+            "getPageList",
+            "(Leu/kanade/tachiyomi/source/model/SChapter;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+        )
     }
 
     pub fn manga_details(&mut self, src: &Source, manga: &Manga) -> Result<Manga, JvmError> {

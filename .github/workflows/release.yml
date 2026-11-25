@@ -28,7 +28,7 @@ jobs:
         run: scripts/release.sh "${GITHUB_REF_NAME}"
 
       - name: Fixture gate (must pass before publishing)
-        run: node test/run.mjs fixtures && node --test test/headers.test.mjs test/sleep.test.mjs test/v023.test.mjs test/pending.test.mjs
+        run: node test/run.mjs fixtures && node --test test/headers.test.mjs test/sleep.test.mjs test/v023.test.mjs test/pending.test.mjs test/v025.test.mjs
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

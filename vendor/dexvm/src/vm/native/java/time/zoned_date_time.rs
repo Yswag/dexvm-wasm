@@ -24,6 +24,19 @@ pub(crate) fn zdt_to_epoch_second(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Long(millis.div_euclid(1000)))
 }
 
+// wasm: ZonedDateTime / OffsetDateTime / LocalDateTime -> LocalDate
+pub(crate) fn zdt_to_local_date(vm: &mut Vm, args: &[JValue]) -> R {
+    let millis = millis_of(vm, args[0]).ok_or_else(|| npe(vm))?;
+    let days = millis.div_euclid(DAY_MS).max(0) as u32;
+    alloc(vm, "Ljava/time/LocalDate;", Native::LocalDay(days))
+}
+
+// wasm: ZonedDateTime / OffsetDateTime -> LocalDateTime
+pub(crate) fn zdt_to_local_date_time(vm: &mut Vm, args: &[JValue]) -> R {
+    let millis = millis_of(vm, args[0]).ok_or_else(|| npe(vm))?;
+    alloc(vm, "Ljava/time/LocalDateTime;", Native::EpochMillis(millis))
+}
+
 pub(crate) fn zdt_now_zoned(vm: &mut Vm, _args: &[JValue]) -> R {
     alloc(
         vm,
@@ -304,6 +317,54 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "()J",
         true,
         zdt_to_epoch_second
+    ),
+    // wasm:
+    ne!(
+        "Ljava/time/ZonedDateTime;",
+        "toLocalDate",
+        "()Ljava/time/LocalDate;",
+        true,
+        zdt_to_local_date
+    ),
+    // wasm:
+    ne!(
+        "Ljava/time/ZonedDateTime;",
+        "toLocalDateTime",
+        "()Ljava/time/LocalDateTime;",
+        true,
+        zdt_to_local_date_time
+    ),
+    // wasm:
+    ne!(
+        "Ljava/time/chrono/ChronoZonedDateTime;",
+        "toLocalDate",
+        "()Ljava/time/chrono/ChronoLocalDate;",
+        true,
+        zdt_to_local_date
+    ),
+    // wasm:
+    ne!(
+        "Ljava/time/OffsetDateTime;",
+        "toLocalDate",
+        "()Ljava/time/LocalDate;",
+        true,
+        zdt_to_local_date
+    ),
+    // wasm:
+    ne!(
+        "Ljava/time/OffsetDateTime;",
+        "toLocalDateTime",
+        "()Ljava/time/LocalDateTime;",
+        true,
+        zdt_to_local_date_time
+    ),
+    // wasm:
+    ne!(
+        "Ljava/time/LocalDateTime;",
+        "toLocalDate",
+        "()Ljava/time/LocalDate;",
+        true,
+        zdt_to_local_date
     ),
     ne!(
         "Ljava/time/ZonedDateTime;",
