@@ -5,6 +5,7 @@
 //
 //   DEXVM_LOG=1 node test/debug.mjs test/fixtures/tachiyomi-zh.komiic-v1.6.11.apk
 import fs from 'node:fs';
+import nodeVm from 'node:vm';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +31,7 @@ function http(reqJson) {
 
   const id = `${process.pid}-${n}`;
   const bodyFile = path.join(WORK, `b-${id}`);
-  const args = ['-sS', '--max-time', '40', '-o', bodyFile, '-w', '%{http_code}'];
+  const args = ['-sS', '-g', '--max-time', '40', '-o', bodyFile, '-w', '%{http_code}'];
   for (const [k, v] of req.headers || []) args.push('-H', `${k}: ${v}`);
   if (req.bodyBase64) {
     fs.writeFileSync(`${bodyFile}.req`, Buffer.from(req.bodyBase64, 'base64'));
@@ -64,7 +65,7 @@ const vm = await createDexvm({
   },
   evalJs: (src) => {
     try {
-      return JSON.stringify({ ok: true, value: new Function(`"use strict"; return (${src}\n);`)() });
+      return JSON.stringify({ ok: true, value: nodeVm.runInNewContext(src, {}, { timeout: 5000 }) });
     } catch (e) {
       return JSON.stringify({ ok: false, error: String(e.message) });
     }

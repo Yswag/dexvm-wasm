@@ -2405,6 +2405,45 @@ pub static SHIM_CLASSES: &[ShimDef] = &[
         &[],
         ACC_INTERFACE | ACC_ABSTRACT
     ),
+    // wasm: Kotlin stdlib defines Function5..Function22 + FunctionN.
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function5;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function6;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function7;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function8;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function9;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function10;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function11;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function12;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function13;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function14;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function15;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function16;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function17;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function18;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function19;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function20;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function21;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/Function22;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
+    #[cfg(feature = "kotlin")]
+    shim!("Lkotlin/jvm/functions/FunctionN;", None, &[], ACC_INTERFACE | ACC_ABSTRACT),
     #[cfg(feature = "kotlin")]
     shim!(
         "Lkotlin/jvm/internal/CollectionToArray;",

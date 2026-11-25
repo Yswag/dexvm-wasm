@@ -367,45 +367,58 @@ fn image_response(
     p: &PageRef,
     url: &str,
 ) -> Result<JValue, JvmError> {
-    let pj = page_obj(k, p)?;
-    // 1.6 sources override `getImageRequest(Page)`; older ones override the
-    // legacy `imageRequest(Page)`. Try both and keep the request that actually
-    // carries headers (the one the extension customised).
-    let mut req = match k.ctx().invoke_on(
+    let mut resolved = p.clone();
+    if resolved.image_url.is_empty() && !url.is_empty() {
+        resolved.image_url = url.to_string();
+    }
+    let pj = page_obj(k, &resolved)?;
+    // 1.6 sources override `getImageRequest(Page)`; older ones (and many
+    // HttpSource subclasses like MangaDex) override `imageRequest(Page)`.
+    let req = match k.ctx().invoke_on(
         src.inst(),
         "getImageRequest",
         "(Leu/kanade/tachiyomi/source/model/Page;)Lokhttp3/Request;",
         &[pj],
     ) {
-        Ok(r) => r,
-        Err(e) => {
-            log::debug!("bridge: getImageRequest failed ({e}); falling back to a bare GET");
-            let cid = k.ctx().vm().ensure_class_by_desc("Lokhttp3/Request;")?;
-            let inst = k.ctx().vm().arena.alloc(
-                cid,
-                Vec::new(),
-                Some(Native::Request {
-                    url: url.to_string(),
-                    method: "GET".to_string(),
-                    headers: Vec::new(),
-                    body: None,
-                }),
-            );
-            JValue::Obj(inst)
+        Ok(r) => {
+            if request_headers(k, r).map_or(true, |h| h.is_empty()) {
+                match k.ctx().invoke_on(
+                    src.inst(),
+                    "imageRequest",
+                    "(Leu/kanade/tachiyomi/source/model/Page;)Lokhttp3/Request;",
+                    &[pj],
+                ) {
+                    Ok(r2) if request_headers(k, r2).is_some_and(|h| !h.is_empty()) => r2,
+                    _ => r,
+                }
+            } else {
+                r
+            }
         }
-    };
-    if request_headers(k, req).map_or(true, |h| h.is_empty()) {
-        if let Ok(r2) = k.ctx().invoke_on(
+        Err(_) => match k.ctx().invoke_on(
             src.inst(),
             "imageRequest",
             "(Leu/kanade/tachiyomi/source/model/Page;)Lokhttp3/Request;",
             &[pj],
         ) {
-            if request_headers(k, r2).is_some_and(|h| !h.is_empty()) {
-                req = r2;
+            Ok(r2) => r2,
+            Err(e) => {
+                log::debug!("bridge: getImageRequest/imageRequest failed ({e}); falling back to a bare GET");
+                let cid = k.ctx().vm().ensure_class_by_desc("Lokhttp3/Request;")?;
+                let inst = k.ctx().vm().arena.alloc(
+                    cid,
+                    Vec::new(),
+                    Some(Native::Request {
+                        url: url.to_string(),
+                        method: "GET".to_string(),
+                        headers: Vec::new(),
+                        body: None,
+                    }),
+                );
+                JValue::Obj(inst)
             }
-        }
-    }
+        },
+    };
     if log::log_enabled!(log::Level::Debug) {
         if let Some(Native::Request {
             url: ru,

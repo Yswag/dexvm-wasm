@@ -188,19 +188,21 @@ fn eval_js(vm: &mut Vm, src: &str) -> Result<JValue, NatErr> {
     }
 }
 
+// QuickJs.evaluate/compile/execute are instance methods: args[0] is `this`,
+// args[1] is the script string or compiled bytecode array.
 fn quickjs_evaluate(vm: &mut Vm, args: &[JValue]) -> Result<JValue, NatErr> {
-    let src = vm.str_of_jvalue(args[0]).unwrap_or_default();
+    let src = args.get(1).and_then(|v| vm.str_of_jvalue(*v)).unwrap_or_default();
     eval_js(vm, &src)
 }
 
 fn quickjs_compile(vm: &mut Vm, args: &[JValue]) -> Result<JValue, NatErr> {
-    let src = vm.str_of_jvalue(args[0]).unwrap_or_default();
+    let src = args.get(1).and_then(|v| vm.str_of_jvalue(*v)).unwrap_or_default();
     let bytes: Vec<i8> = src.into_bytes().into_iter().map(|b| b as i8).collect();
     alloc_array(vm, "B", ArrayData::Byte(bytes))
 }
 
 fn quickjs_execute(vm: &mut Vm, args: &[JValue]) -> Result<JValue, NatErr> {
-    let src = match vm.payload_of(args[0]) {
+    let src = match args.get(1).and_then(|v| vm.payload_of(*v)) {
         Some(Native::Array(ArrayData::Byte(bytes))) => {
             let raw: Vec<u8> = bytes.iter().map(|b| *b as u8).collect();
             String::from_utf8_lossy(&raw).into_owned()

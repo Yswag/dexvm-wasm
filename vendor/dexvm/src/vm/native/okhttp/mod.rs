@@ -1127,9 +1127,15 @@ pub(crate) fn okhttp_http_url_new_builder(vm: &mut Vm, args: &[JValue]) -> R {
     )
 }
 
+// wasm: OkHttp3 addQueryParameter allows null values (renders `?name` without `=`).
 pub(crate) fn okhttp_http_url_builder_add_query(vm: &mut Vm, args: &[JValue]) -> R {
-    let (Some(name), Some(value)) = (jstr(vm, args[1]).ok(), jstr(vm, args[2]).ok()) else {
+    let Ok(name) = jstr(vm, args[1]) else {
         return Err(npe(vm));
+    };
+    let value = if args[2].is_null_ref() {
+        None
+    } else {
+        Some(jstr(vm, args[2])?)
     };
     let Some(Native::HttpUrl(url)) = payload_mut(vm, args[0]) else {
         return Err(npe(vm));
@@ -1140,8 +1146,10 @@ pub(crate) fn okhttp_http_url_builder_add_query(vm: &mut Vm, args: &[JValue]) ->
         url.push('?');
     }
     url.push_str(&name);
-    url.push('=');
-    url.push_str(&value);
+    if let Some(value) = value {
+        url.push('=');
+        url.push_str(&value);
+    }
     Ok(args[0])
 }
 
@@ -1219,7 +1227,8 @@ pub(crate) fn okhttp_http_url_builder_set_path_segment(vm: &mut Vm, args: &[JVal
 }
 
 pub(crate) fn okhttp_http_url_builder_fragment(vm: &mut Vm, args: &[JValue]) -> R {
-    let fragment = if args[1].is_null() {
+    // wasm: DEX `const/4 0` encodes null as Int(0); use is_null_ref().
+    let fragment = if args[1].is_null_ref() {
         None
     } else {
         Some(jstr(vm, args[1])?)
@@ -1258,21 +1267,42 @@ pub(crate) fn okhttp_http_url_builder_build(vm: &mut Vm, args: &[JValue]) -> R {
     alloc(vm, "Lokhttp3/HttpUrl;", Native::HttpUrl(url.clone()))
 }
 
+// wasm: OkHttp3 setQueryParameter replaces existing values for `name` and allows null value.
 pub(crate) fn okhttp_http_url_builder_set_query(vm: &mut Vm, args: &[JValue]) -> R {
-    let (Some(name), Some(value)) = (jstr(vm, args[1]).ok(), jstr(vm, args[2]).ok()) else {
+    let Ok(name) = jstr(vm, args[1]) else {
         return Err(npe(vm));
+    };
+    let value = if args[2].is_null_ref() {
+        None
+    } else {
+        Some(jstr(vm, args[2])?)
     };
     let Some(Native::HttpUrl(url)) = payload_mut(vm, args[0]) else {
         return Err(npe(vm));
     };
-    if url.contains('?') {
-        url.push('&');
+    if let Some((scheme, authority, path, suffix)) = http_url_parts(url) {
+        let (query, fragment) = split_query_fragment(&suffix);
+        let mut kept: Vec<(String, String)> = query_pairs(&query)
+            .into_iter()
+            .filter(|(k, _)| k != &name)
+            .collect();
+        kept.push((name, value.unwrap_or_default()));
+        *url = format!(
+            "{scheme}://{authority}{path}?{}{fragment}",
+            pairs_to_query(&kept)
+        );
     } else {
-        url.push('?');
+        if url.contains('?') {
+            url.push('&');
+        } else {
+            url.push('?');
+        }
+        url.push_str(&name);
+        if let Some(value) = value {
+            url.push('=');
+            url.push_str(&value);
+        }
     }
-    url.push_str(&name);
-    url.push('=');
-    url.push_str(&value);
     Ok(args[0])
 }
 
@@ -1821,8 +1851,9 @@ pub(crate) fn http_url_builder_port(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(args[0])
 }
 
+// wasm: DEX `const/4 0` encodes null as Int(0); use is_null_ref() so query(null) clears query.
 fn http_url_builder_set_query_impl(vm: &mut Vm, args: &[JValue]) -> R {
-    let new_query = if args[1].is_null() {
+    let new_query = if args[1].is_null_ref() {
         None
     } else {
         Some(jstr(vm, args[1])?)

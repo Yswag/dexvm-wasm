@@ -14,7 +14,131 @@ use crate::vm::object::JsoupDocRef;
 // ---------------------------------------------------------------------------
 
 fn select_selector(selector: &str) -> Option<Matcher> {
-    Matcher::new(&normalize_attr_values(&normalize_contains(selector))).ok()
+    // wasm: rewrite literal `[attr~=lit]` to `[attr*="lit"]` since jsoup's `~=`
+    // is a regex match (substring search), not CSS whitespace-word match.
+    let rewritten = rewrite_literal_attr_regex(selector);
+    Matcher::new(&normalize_attr_values(&normalize_contains(&rewritten))).ok()
+}
+
+/// wasm: In jsoup, `[attr~=regex]` tests whether `attr` matches `regex`
+/// anywhere (Matcher.find). Standard CSS treats `~=` as a whitespace-separated
+/// word match, which breaks selectors like `section[x-data~=scroll] > img`.
+/// When `regex` has no regex metacharacters, rewrite `[attr~=lit]` to
+/// `[attr*="lit"]` so the CSS engine handles it natively in any position.
+fn is_plain_regex_literal(pat: &str) -> bool {
+    !pat.is_empty()
+        && !pat.chars().any(|c| {
+            matches!(
+                c,
+                '.' | '^' | '$' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '\\'
+            )
+        })
+}
+
+fn unquote_attr_val(v: &str) -> &str {
+    let t = v.trim();
+    if t.len() >= 2
+        && ((t.starts_with('"') && t.ends_with('"')) || (t.starts_with('\'') && t.ends_with('\'')))
+    {
+        &t[1..t.len() - 1]
+    } else {
+        t
+    }
+}
+
+fn rewrite_literal_attr_regex(selector: &str) -> String {
+    if !selector.contains("~=") {
+        return selector.to_string();
+    }
+    let mut out = String::with_capacity(selector.len() + 4);
+    let bytes = selector.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'[' {
+            if let Some(rel_end) = selector[i + 1..].find(']') {
+                let end = i + 1 + rel_end;
+                let frag = &selector[i + 1..end];
+                if let Some(op) = frag.find("~=") {
+                    let attr = frag[..op].trim();
+                    let raw_val = &frag[op + 2..];
+                    let val = unquote_attr_val(raw_val);
+                    if !attr.is_empty() && is_plain_regex_literal(val) {
+                        out.push('[');
+                        out.push_str(attr);
+                        out.push_str("*=\"");
+                        out.push_str(val);
+                        out.push_str("\"]");
+                        i = end + 1;
+                        continue;
+                    }
+                }
+                out.push_str(&selector[i..=end]);
+                i = end + 1;
+                continue;
+            }
+        }
+        let ch = selector[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+/// wasm: Handle non-literal jsoup `[attr~=regex]` selectors by splitting at the
+/// segment containing `[attr~=regex]`, selecting with `[attr]`, filtering by
+/// `fancy_regex::Regex::is_match`, and continuing with any trailing combinator.
+fn split_attr_regex(selector: &str) -> Option<(String, String, String, Option<String>)> {
+    let bytes = selector.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'[' {
+            let rel_end = selector[i + 1..].find(']')?;
+            let end = i + 1 + rel_end;
+            let frag = &selector[i + 1..end];
+            if let Some(op) = frag.find("~=") {
+                let attr = frag[..op].trim().to_string();
+                let pat = unquote_attr_val(&frag[op + 2..]).to_string();
+                // Find the end of the compound selector containing this `[...]`.
+                let mut seg_end = end + 1;
+                let mut bracket_depth = 0usize;
+                let mut paren_depth = 0usize;
+                for (off, ch) in selector[end + 1..].char_indices() {
+                    match ch {
+                        '[' => bracket_depth += 1,
+                        ']' => bracket_depth = bracket_depth.saturating_sub(1),
+                        '(' => paren_depth += 1,
+                        ')' => paren_depth = paren_depth.saturating_sub(1),
+                        ' ' | '\t' | '\n' | '\r' | '>' | '+' | '~'
+                            if bracket_depth == 0 && paren_depth == 0 =>
+                        {
+                            seg_end = end + 1 + off;
+                            break;
+                        }
+                        _ => {}
+                    }
+                    seg_end = end + 1 + off + ch.len_utf8();
+                }
+                let mut left = String::with_capacity(seg_end);
+                left.push_str(&selector[..i]);
+                left.push('[');
+                left.push_str(&attr);
+                left.push(']');
+                left.push_str(&selector[end + 1..seg_end]);
+                let rest = selector[seg_end..].trim();
+                let tail = if rest.is_empty() {
+                    None
+                } else {
+                    Some(rest.to_string())
+                };
+                return Some((left, attr, pat, tail));
+            }
+            i = end + 1;
+            continue;
+        }
+        let ch = selector[i..].chars().next().unwrap();
+        i += ch.len_utf8();
+    }
+    None
 }
 
 /// Quote unquoted attribute values inside `[...]` so dom_query accepts the
@@ -158,7 +282,33 @@ fn node_text_contains(doc: &Document, id: NodeId, needle: &str) -> bool {
 }
 
 fn select_matches(doc: &Document, root: NodeRef, selector: &str) -> Vec<NodeId> {
-    let (selector, needle) = split_contains(selector);
+    let rewritten = rewrite_literal_attr_regex(selector);
+    if let Some((left, attr, pat, tail)) = split_attr_regex(&rewritten) {
+        let Ok(re) = fancy_regex::Regex::new(&pat) else {
+            return Vec::new();
+        };
+        let mut matched = select_matches(doc, root, &left);
+        matched.retain(|id| {
+            NodeRef::new(*id, &doc.tree)
+                .attr(&attr)
+                .map(|v| re.is_match(v.as_ref()).unwrap_or(false))
+                .unwrap_or(false)
+        });
+        if let Some(tail) = tail {
+            let mut out = Vec::new();
+            for id in matched {
+                let sub = NodeRef::new(id, &doc.tree);
+                for cid in select_matches(doc, sub, &tail) {
+                    if !out.contains(&cid) {
+                        out.push(cid);
+                    }
+                }
+            }
+            return out;
+        }
+        return matched;
+    }
+    let (selector, needle) = split_contains(&rewritten);
     let mut ids = select_matches_inner(root, &selector);
     if let Some(needle) = needle {
         ids.retain(|id| node_text_contains(doc, *id, &needle));
@@ -361,7 +511,7 @@ fn select_first_at(vm: &mut Vm, doc: JsoupDocRef, node: NodeId, selector: &str) 
         let d = &*doc.doc;
         let node_ref = NodeRef::new(node, &d.tree);
         let (base, needle) = split_contains(selector);
-        if needle.is_some() || base.trim_start().starts_with('>') {
+        if needle.is_some() || base.trim_start().starts_with('>') || selector.contains("~=") {
             let ids = select_matches(d, node_ref, selector);
             return match ids.first() {
                 Some(id) => alloc(

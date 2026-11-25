@@ -11,6 +11,7 @@
 //   node test/run.mjs index          # 10 popular sources from keiyoushi index
 //   node test/run.mjs all            # everything, prints the result table
 import fs from 'node:fs';
+import nodeVm from 'node:vm';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -160,7 +161,7 @@ async function newVm() {
     },
     evalJs: (src) => {
       try {
-        const v = new Function(`"use strict"; return (${src}\n);`)();
+        const v = nodeVm.runInNewContext(src, {}, { timeout: 5000 });
         return JSON.stringify({ ok: true, value: v === undefined ? null : v });
       } catch (e) {
         return JSON.stringify({ ok: false, error: String(e && e.message) });

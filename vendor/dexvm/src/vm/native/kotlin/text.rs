@@ -585,21 +585,45 @@ fn stringskt_substring_after_last_default(vm: &mut Vm, args: &[JValue]) -> R {
     ))
 }
 
+// wasm: JVM/Kotlin string indices are UTF-16 code-unit offsets, not UTF-8 byte offsets.
+fn u16_to_byte_offset(s: &str, u16_idx: usize) -> usize {
+    let mut units = 0usize;
+    for (byte_idx, ch) in s.char_indices() {
+        if units >= u16_idx {
+            return byte_idx;
+        }
+        units += ch.len_utf16();
+    }
+    s.len()
+}
+
+fn byte_to_u16_offset(s: &str, byte_idx: usize) -> usize {
+    s[..byte_idx.min(s.len())].encode_utf16().count()
+}
+
 fn stringskt_last_index_of_default(vm: &mut Vm, args: &[JValue]) -> R {
     let text = charseq_of(vm, args[0])?;
     let needle = charseq_of(vm, args[1])?;
-    let start = if int_of(vm, args[4]) & 4 != 0 {
+    let mask = int_of(vm, args[4]);
+    let end_byte = if mask & 2 != 0 || mask & 4 != 0 {
         text.len()
     } else {
-        int_of(vm, args[2]).max(0) as usize
+        let start = int_of(vm, args[2]);
+        if start < 0 {
+            return Ok(JValue::Int(-1));
+        }
+        let needle_u16 = needle.encode_utf16().count();
+        u16_to_byte_offset(&text, (start as usize).saturating_add(needle_u16))
     };
-    let hay = &text[..start.min(text.len())];
+    let hay = &text[..end_byte];
     let found = if int_of(vm, args[3]) != 0 {
         rfind_ignore_case(hay, &needle)
     } else {
         hay.rfind(&needle)
     };
-    Ok(JValue::Int(found.map_or(-1, |i| i as i32)))
+    Ok(JValue::Int(
+        found.map_or(-1, |i| byte_to_u16_offset(&text, i) as i32),
+    ))
 }
 
 fn stringskt_trim_indent(vm: &mut Vm, args: &[JValue]) -> R {
@@ -694,40 +718,48 @@ fn stringskt_equals(vm: &mut Vm, args: &[JValue]) -> R {
 fn stringskt_index_of_char_default(vm: &mut Vm, args: &[JValue]) -> R {
     let text = charseq_of(vm, args[0])?;
     let needle = char::from_u32(int_of(vm, args[1]) as u32).unwrap_or('\0');
-    let start = if int_of(vm, args[4]) & 2 != 0 {
+    let start_u16 = if int_of(vm, args[4]) & 2 != 0 {
         0
     } else {
         int_of(vm, args[2]).max(0) as usize
     };
     let ignore_case = int_of(vm, args[4]) & 4 == 0 && int_of(vm, args[3]) != 0;
-    let suffix = text.get(start..).unwrap_or("");
+    // wasm: convert UTF-16 start index to UTF-8 byte offset and result back to UTF-16.
+    let start_byte = u16_to_byte_offset(&text, start_u16);
+    let suffix = &text[start_byte..];
     let found = if ignore_case {
         suffix
             .char_indices()
             .find(|(_, ch)| ch.to_lowercase().to_string() == needle.to_lowercase().to_string())
-            .map(|(index, _)| start + index)
+            .map(|(index, _)| start_byte + index)
     } else {
-        suffix.find(needle).map(|index| start + index)
+        suffix.find(needle).map(|index| start_byte + index)
     };
-    Ok(JValue::Int(found.map_or(-1, |index| index as i32)))
+    Ok(JValue::Int(
+        found.map_or(-1, |index| byte_to_u16_offset(&text, index) as i32),
+    ))
 }
 
 fn stringskt_index_of_string_default(vm: &mut Vm, args: &[JValue]) -> R {
     let text = charseq_of(vm, args[0])?;
     let needle = jstr(vm, args[1])?;
-    let start = if int_of(vm, args[4]) & 2 != 0 {
+    let start_u16 = if int_of(vm, args[4]) & 2 != 0 {
         0
     } else {
         int_of(vm, args[2]).max(0) as usize
     };
     let ignore_case = int_of(vm, args[4]) & 4 == 0 && int_of(vm, args[3]) != 0;
-    let suffix = text.get(start..).unwrap_or("");
+    // wasm: convert UTF-16 start index to UTF-8 byte offset and result back to UTF-16.
+    let start_byte = u16_to_byte_offset(&text, start_u16);
+    let suffix = &text[start_byte..];
     let found = if ignore_case {
-        find_ignore_case(suffix, &needle).map(|index| start + index)
+        find_ignore_case(suffix, &needle).map(|index| start_byte + index)
     } else {
-        suffix.find(&needle).map(|index| start + index)
+        suffix.find(&needle).map(|index| start_byte + index)
     };
-    Ok(JValue::Int(found.map_or(-1, |index| index as i32)))
+    Ok(JValue::Int(
+        found.map_or(-1, |index| byte_to_u16_offset(&text, index) as i32),
+    ))
 }
 
 fn charskt_check_radix(vm: &mut Vm, args: &[JValue]) -> R {
@@ -1257,20 +1289,26 @@ fn stringskt_last_index_of_char_default(vm: &mut Vm, args: &[JValue]) -> R {
     let text = charseq_of(vm, args[0])?;
     let needle = char::from_u32(int_of(vm, args[1]) as u32).unwrap_or('\0');
     let mask = int_of(vm, args[5]);
-    let start = if mask & 4 != 0 {
+    let end_byte = if mask & 2 != 0 || mask & 4 != 0 {
         text.len()
     } else {
-        int_of(vm, args[2]).max(0) as usize
+        let start = int_of(vm, args[2]);
+        if start < 0 {
+            return Ok(JValue::Int(-1));
+        }
+        u16_to_byte_offset(&text, (start as usize).saturating_add(needle.len_utf16()))
     };
     let ignore_case = mask & 0x10 == 0 && int_of(vm, args[3]) != 0;
-    let hay = &text[..start.min(text.len())];
+    let hay = &text[..end_byte];
     let found = if ignore_case {
         let needle_str = needle.to_string();
         rfind_ignore_case(hay, &needle_str)
     } else {
         hay.rfind(needle)
     };
-    Ok(JValue::Int(found.map_or(-1, |i| i as i32)))
+    Ok(JValue::Int(
+        found.map_or(-1, |i| byte_to_u16_offset(&text, i) as i32),
+    ))
 }
 
 /// `StringsKt.lines(CharSequence)` — split on \n, \r\n or \r; a trailing
@@ -1466,15 +1504,19 @@ fn stringskt_remove_range_indices(vm: &mut Vm, args: &[JValue]) -> R {
 fn stringskt_index_of(vm: &mut Vm, args: &[JValue]) -> R {
     let text = charseq_of(vm, args[0])?;
     let needle = jstr(vm, args[1])?;
-    let start = int_of(vm, args[2]).max(0) as usize;
+    let start_u16 = int_of(vm, args[2]).max(0) as usize;
     let ignore_case = int_of(vm, args[3]) != 0;
-    let suffix = text.get(start..).unwrap_or("");
+    // wasm: convert UTF-16 start index to UTF-8 byte offset and result back to UTF-16.
+    let start_byte = u16_to_byte_offset(&text, start_u16);
+    let suffix = &text[start_byte..];
     let found = if ignore_case {
-        find_ignore_case(suffix, &needle).map(|i| start + i)
+        find_ignore_case(suffix, &needle).map(|i| start_byte + i)
     } else {
-        suffix.find(&needle).map(|i| start + i)
+        suffix.find(&needle).map(|i| start_byte + i)
     };
-    Ok(JValue::Int(found.map_or(-1, |i| i as i32)))
+    Ok(JValue::Int(
+        found.map_or(-1, |i| byte_to_u16_offset(&text, i) as i32),
+    ))
 }
 
 /// `StringsKt.withIndex(CharSequence)` — materializes a List of
@@ -1821,8 +1863,10 @@ fn regex_find(vm: &mut Vm, args: &[JValue]) -> R {
 }
 
 /// `Regex$Companion.escape(String)` — regex-literal escaping.
+// wasm: Regex$Companion.escape is an instance method (`args[0]` is Companion,
+// `args[1]` is the String to escape).
 fn regex_companion_escape(vm: &mut Vm, args: &[JValue]) -> R {
-    let pattern = jstr(vm, args[0])?;
+    let pattern = jstr(vm, args[1])?;
     Ok(new_str(vm, &fancy_regex::escape(&pattern)))
 }
 

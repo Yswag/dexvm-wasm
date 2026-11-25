@@ -9,6 +9,7 @@ Update this table on every release. "Passing" means
 |---|---|---|---|---|---|
 | 2026-11-08 | v0.1.0 | 0.2.0 + patch | 1.4.x, 1.6.3–1.6.8 | `test/fixtures/` (5 APKs) | 5/5 open + sources; MangaPill 1.4.9 and Comic Fury 1.4.8 complete the full flow including images |
 | 2026-11-12 | v0.2.0-beta.1 | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + 97 zh sweep | 14/14 open; 1.6 gate 5/11 full flow (dm5, Komiic, manhuagui, kaobeimanhua, CuuTruyen); zh full-flow 45/97; EN spot check 0/12 but MangaDex reaches pages |
+| 2026-11-25 | unreleased | 0.2.0 + patch | 1.6.1–1.6.72 | 14 fixtures + EN 1.6 follow-up | 14/14 open; 1.6 gate **6/11** full flow (+Weeb Central); EN follow-up adds **MangaDex**, **MangaFire**, and **Mangahere** end-to-end |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
@@ -226,6 +227,50 @@ CuuTruyen 1.6 pass) and `DEXVM_LANGS=en` selects languages for `apks` mode.
 
 Shims added for EN: `ZonedDateTime/LocalDateTime/LocalDate.format(formatter)`,
 `java.util.concurrent.locks.ReentrantReadWriteLock` (+Read/WriteLock).
+
+### 1.6.x EN & VM follow-up (2026-11-25)
+
+Five VM/bridge fixes targeting the remaining 1.6.x EN and cross-source gaps:
+
+* **Jsoup `[attr~=regex]`**: Jsoup treats `~=` as a regex `find` rather than
+  CSS whitespace-word matching. Plain literals now rewrite to `[attr*="..."]`
+  and regex patterns split/filter with `fancy_regex` (including ancestor
+  segments like `section[x-data~=scroll] > img`). Fixes **Weeb Central 1.6.27**
+  (32 mangas / 1,199 chapters / 13 pages / 161 KB PNG) — 1.6 fixture gate is
+  now **6/11**.
+* **Bridge `image_response` fallback**: when `getImageRequest(Page)` is not
+  overridden, fall back unconditionally to `imageRequest(Page)` (previously
+  discarded when headers were empty) and seed the resolved `imageUrl` onto the
+  `Page` object. Fixes **MangaDex 1.6.5** (20 mangas / 4 chapters / 26 pages /
+  7.0 MB JPEG with `DEXVM_UA=okhttp/4.12.0`).
+* **DEX `const/4 0` null references (`is_null_ref`)**: `HttpUrl$Builder.query`
+  / `encodedQuery` / `fragment` / `addQueryParameter` / `setQueryParameter` and
+  `StringBuilder.append(String)` / `append(CharSequence)` / `insert(int, String)`
+  now treat DEX `Int(0)` null refs as `null` (`StringBuilder` appends `"null"`,
+  `HttpUrl$Builder.query(null)` clears the query). Fixes **MangaFire 1.6.40**
+  end-to-end (50 mangas / 475 chapters / 34 pages / 144 KB JPEG, including its
+  VRF interceptor).
+* **`Regex$Companion.escape(String)`**: read `args[1]` instead of `args[0]`
+  (the Companion receiver). Unblocks Madara-based 1.6 sources like
+  **Kun Manga Online 1.6.63** through `popular` (12 mangas).
+* **Kotlin `Function5`–`Function22` + `FunctionN`**: registered in the VM
+  interface table. Unblocks **MangaReader.site 1.6.41** through `sources` and
+  its GraphQL `popular` request.
+* **Bridge `QuickJs.evaluate`/`compile`/`execute`**: fixed instance-method
+  argument indexing (`args[1]` instead of `args[0]`, which was `this` and
+  silently evaluated `""`), and updated the Node test harness `evalJs` to run
+  full JS programs via `node:vm`.
+* **`StringsKt.indexOf` / `lastIndexOf` UTF-16 offsets**: converted start/result
+  indices between JVM UTF-16 code units and Rust UTF-8 byte offsets (preventing
+  shifted substrings and potential non-boundary panics on multi-byte pages).
+  Together with the QuickJS fix, **Mangahere 1.6.3** passes end-to-end
+  (70 mangas / 422 chapters / 16 pages / 176 KB JPEG).
+* **`CloseableKt.closeFinally` / `ArrayDeque.<init>` / `runnable_post`**:
+  switched remaining `args[i].is_null()` checks to `is_null_ref()` for DEX
+  `const/4 0` null references.
+
+Unit test `vm::tests::ext16_shims_null_ref_regex_escape_and_jsoup_attr_regex`
+locks in these behaviors without requiring an external APK.
 
 ### Inverse gap scan (2026-11-12)
 

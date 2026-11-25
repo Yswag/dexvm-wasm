@@ -221,7 +221,9 @@ first three mangas (site data).
 
 The ext-lib 1.6 builds currently published by the keiyoushi repo are
 gated by `node test/run.mjs 1.6`; see `COMPAT.md` for the per-source
-matrix (dm5, Komiic, manhuagui and kaobeimanhua currently pass end to end).
+matrix (dm5, Komiic, manhuagui, kaobeimanhua, CuuTruyen, and Weeb Central
+currently pass end to end, along with MangaDex, MangaFire, and Mangahere in
+the EN check).
 
 ## Limitations
 

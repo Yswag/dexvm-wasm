@@ -2439,4 +2439,155 @@ mod tests {
             "unexpected error: {err}"
         );
     }
+
+    // wasm: regression tests for 1.6.x VM/shim fixes (no external APK needed).
+    #[test]
+    fn ext16_shims_null_ref_regex_escape_and_jsoup_attr_regex() {
+        let mut vm = Vm::new(vec![], Box::new(Vec::new())).expect("vm");
+        native::register(&mut vm);
+
+        // 1. StringBuilder.append(null) and append(Int(0) DEX null) append "null".
+        let sb_cid = vm.ensure_class_by_desc("Ljava/lang/StringBuilder;").unwrap();
+        let sb = JValue::Obj(vm.alloc_instance(sb_cid).unwrap());
+        vm.invoke_virtual(sb, "<init>", "()V").unwrap();
+        vm.invoke_virtual_args(
+            sb,
+            "append",
+            "(Ljava/lang/String;)Ljava/lang/StringBuilder;",
+            vec![JValue::Null],
+        )
+        .unwrap();
+        vm.invoke_virtual_args(
+            sb,
+            "append",
+            "(Ljava/lang/String;)Ljava/lang/StringBuilder;",
+            vec![JValue::Int(0)],
+        )
+        .unwrap();
+        let out = vm
+            .invoke_virtual(sb, "toString", "()Ljava/lang/String;")
+            .unwrap();
+        assert_eq!(vm.str_of_jvalue(out).as_deref(), Some("nullnull"));
+
+        // 2. HttpUrl$Builder.query(Int(0)) (DEX const/4 0 null) clears query.
+        let url_cid = vm.ensure_class_by_desc("Lokhttp3/HttpUrl;").unwrap();
+        let parsed = JValue::Obj(vm.arena.alloc(
+            url_cid,
+            Vec::new(),
+            Some(Native::HttpUrl(
+                "https://mangafire.to/api/titles?a=1&b=2".to_string(),
+            )),
+        ));
+        let b = vm
+            .invoke_virtual(parsed, "newBuilder", "()Lokhttp3/HttpUrl$Builder;")
+            .unwrap();
+        vm.invoke_virtual_args(
+            b,
+            "query",
+            "(Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;",
+            vec![JValue::Int(0)],
+        )
+        .unwrap();
+        let built = vm
+            .invoke_virtual(b, "build", "()Lokhttp3/HttpUrl;")
+            .unwrap();
+        let built_s = vm
+            .invoke_virtual(built, "toString", "()Ljava/lang/String;")
+            .unwrap();
+        assert_eq!(
+            vm.str_of_jvalue(built_s).as_deref(),
+            Some("https://mangafire.to/api/titles")
+        );
+
+        // 3. Regex$Companion.escape reads args[1], not args[0].
+        let comp_cid = vm
+            .ensure_class_by_desc("Lkotlin/text/Regex$Companion;")
+            .unwrap();
+        let comp = JValue::Obj(vm.alloc_instance(comp_cid).unwrap());
+        let pat = vm.alloc_string("a.b[0]+?");
+        let esc = vm
+            .invoke_virtual_args(
+                comp,
+                "escape",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                vec![pat],
+            )
+            .unwrap();
+        assert_eq!(vm.str_of_jvalue(esc).as_deref(), Some(r"a\.b\[0\]\+\?"));
+
+        // 4. Function5..Function22 are registered.
+        assert!(vm
+            .ensure_class_by_desc("Lkotlin/jvm/functions/Function7;")
+            .is_ok());
+        assert!(vm
+            .ensure_class_by_desc("Lkotlin/jvm/functions/Function22;")
+            .is_ok());
+
+        // 5. Jsoup `[attr~=regex]` matches both literal substring and regex.
+        let html = vm.alloc_string(
+            r#"<section x-data="{ scrollDown() {} }"><img src="1.jpg"><img src="2.png"></section><a href="/ch/42">ok</a><a href="/ch/abc">no</a>"#,
+        );
+        let doc = vm
+            .invoke_static(
+                "Lorg/jsoup/Jsoup;",
+                "parse",
+                "(Ljava/lang/String;)Lorg/jsoup/nodes/Document;",
+                vec![html],
+            )
+            .unwrap();
+        let sel1 = vm.alloc_string("section[x-data~=scroll] > img");
+        let els1 = vm
+            .invoke_virtual_args(
+                doc,
+                "select",
+                "(Ljava/lang/String;)Lorg/jsoup/select/Elements;",
+                vec![sel1],
+            )
+            .unwrap();
+        let sz1 = vm.invoke_virtual(els1, "size", "()I").unwrap();
+        assert_eq!(sz1.as_int(), 2);
+
+        let sel2 = vm.alloc_string(r"a[href~=/ch/\d+]");
+        let els2 = vm
+            .invoke_virtual_args(
+                doc,
+                "select",
+                "(Ljava/lang/String;)Lorg/jsoup/select/Elements;",
+                vec![sel2],
+            )
+            .unwrap();
+        let sz2 = vm.invoke_virtual(els2, "size", "()I").unwrap();
+        assert_eq!(sz2.as_int(), 1);
+
+        // 6. CloseableKt.closeFinally accepts DEX Int(0) null refs.
+        vm.invoke_static(
+            "Lkotlin/io/CloseableKt;",
+            "closeFinally",
+            "(Ljava/io/Closeable;Ljava/lang/Throwable;)V",
+            vec![JValue::Int(0), JValue::Int(0)],
+        )
+        .unwrap();
+
+        // 7. StringsKt.indexOf returns UTF-16 code-unit indices matching String.substring.
+        let utf_s = vm.alloc_string("漫畫©eval(123);end");
+        let needle = vm.alloc_string("eval(");
+        let idx = vm
+            .invoke_static(
+                "Lkotlin/text/StringsKt;",
+                "indexOf",
+                "(Ljava/lang/CharSequence;Ljava/lang/String;IZ)I",
+                vec![utf_s, needle, JValue::Int(0), JValue::Int(0)],
+            )
+            .unwrap();
+        assert_eq!(idx.as_int(), 3); // 2 CJK chars + 1 '©' = 3 UTF-16 units (not 8 UTF-8 bytes)
+        let sub = vm
+            .invoke_virtual_args(
+                utf_s,
+                "substring",
+                "(II)Ljava/lang/String;",
+                vec![idx, JValue::Int(idx.as_int() + 9)],
+            )
+            .unwrap();
+        assert_eq!(vm.str_of_jvalue(sub).as_deref(), Some("eval(123)"));
+    }
 }

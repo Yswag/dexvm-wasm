@@ -68,14 +68,15 @@ fn copy_to_default(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Long(n))
 }
 
+// wasm: DEX `const/4 0` encodes null as Int(0); use is_null_ref().
 fn close_finally(vm: &mut Vm, args: &[JValue]) -> R {
-    if args[0].is_null() {
+    if args[0].is_null_ref() {
         return Ok(JValue::Null);
     }
     let result = vm
         .invoke_virtual_args(args[0], "close", "()V", vec![])
         .map_err(nat_fatal);
-    if args[1].is_null() {
+    if args[1].is_null_ref() {
         result
     } else {
         Ok(JValue::Null)

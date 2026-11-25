@@ -1340,7 +1340,8 @@ pub(super) fn mapskt_sorted_map_of(vm: &mut Vm, args: &[JValue]) -> R {
 // ---------------------------------------------------------------------------
 
 pub(super) fn arraydeque_init(vm: &mut Vm, args: &[JValue]) -> R {
-    let items = if args.len() > 1 && !args[1].is_null() {
+    // wasm: DEX `const/4 0` encodes null as Int(0); use is_null_ref().
+    let items = if args.len() > 1 && !args[1].is_null_ref() {
         coll_elems(vm, args[1]).unwrap_or_default()
     } else {
         Vec::new()

@@ -1288,7 +1288,8 @@ fn view_self(_vm: &mut Vm, args: &[JValue]) -> R {
 /// `View.post(Runnable)` / `Handler.post(Runnable)` / `Handler.postDelayed`:
 /// the host runs the runnable synchronously (there is no UI thread).
 fn runnable_post(vm: &mut Vm, args: &[JValue]) -> R {
-    if args[1].is_null() {
+    // wasm: DEX `const/4 0` encodes null as Int(0); use is_null_ref().
+    if args[1].is_null_ref() {
         return Err(npe(vm));
     }
     inv_virt(vm, args[1], "run", "()V", &[])?;

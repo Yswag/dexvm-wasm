@@ -34,8 +34,13 @@ pub(crate) fn sb_to_string(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(new_str(vm, &s))
 }
 
+// wasm: Java StringBuilder.append((String) null) appends "null" rather than throwing NPE.
 pub(crate) fn sb_append_str(vm: &mut Vm, args: &[JValue]) -> R {
-    let s = jstr(vm, args[1])?;
+    let s = if args[1].is_null_ref() {
+        "null".to_string()
+    } else {
+        jstr(vm, args[1])?
+    };
     let Some(Native::StringBuilder(dst)) = payload_mut(vm, args[0]) else {
         return Err(npe(vm));
     };
@@ -44,7 +49,7 @@ pub(crate) fn sb_append_str(vm: &mut Vm, args: &[JValue]) -> R {
 }
 
 pub(crate) fn sb_append_charseq(vm: &mut Vm, args: &[JValue]) -> R {
-    if args[1].is_null() {
+    if args[1].is_null_ref() {
         let Some(Native::StringBuilder(dst)) = payload_mut(vm, args[0]) else {
             return Err(npe(vm));
         };
@@ -60,7 +65,7 @@ pub(crate) fn sb_append_charseq(vm: &mut Vm, args: &[JValue]) -> R {
 }
 
 pub(crate) fn sb_append_charseq_range(vm: &mut Vm, args: &[JValue]) -> R {
-    let s = if args[1].is_null() {
+    let s = if args[1].is_null_ref() {
         "null".to_string()
     } else {
         charseq_of(vm, args[1])?
@@ -248,9 +253,14 @@ pub(crate) fn sb_append_code_point(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(args[0])
 }
 
+// wasm: Java StringBuilder.insert(int, (String) null) inserts "null".
 pub(crate) fn sb_insert_string(vm: &mut Vm, args: &[JValue]) -> R {
     let idx = int_of(vm, args[1]).max(0) as usize;
-    let s = jstr(vm, args[2])?;
+    let s = if args[2].is_null_ref() {
+        "null".to_string()
+    } else {
+        jstr(vm, args[2])?
+    };
     let Some(Native::StringBuilder(dst)) = payload_mut(vm, args[0]) else {
         return Err(npe(vm));
     };
