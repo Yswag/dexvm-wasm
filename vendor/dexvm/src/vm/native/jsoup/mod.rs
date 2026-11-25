@@ -633,7 +633,8 @@ pub(crate) fn element_children(vm: &mut Vm, args: &[JValue]) -> R {
     let id = payload0.and_then(element_id_of).ok_or_else(|| npe(vm))?;
     let d = &*doc.doc;
     let node = node_ref_of(d, id);
-    let ids: Vec<dom_query::NodeId> = node.children().iter().map(|c| c.id).collect();
+    // wasm: Jsoup Element.children() returns only child Elements, excluding text/comment nodes.
+    let ids: Vec<dom_query::NodeId> = node.element_children().iter().map(|c| c.id).collect();
     jsoup_elements(vm, doc, ids)
 }
 

@@ -169,6 +169,24 @@ pub(crate) fn integer_to_unsigned_long(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Long(i64::from(v)))
 }
 
+// wasm:
+pub(crate) fn integer_number_of_leading_zeros(vm: &mut Vm, args: &[JValue]) -> R {
+    let v = int_of(vm, args[0]) as u32;
+    Ok(JValue::Int(v.leading_zeros() as i32))
+}
+
+// wasm:
+pub(crate) fn integer_number_of_trailing_zeros(vm: &mut Vm, args: &[JValue]) -> R {
+    let v = int_of(vm, args[0]) as u32;
+    Ok(JValue::Int(v.trailing_zeros() as i32))
+}
+
+// wasm:
+pub(crate) fn integer_lowest_one_bit(vm: &mut Vm, args: &[JValue]) -> R {
+    let v = int_of(vm, args[0]);
+    Ok(JValue::Int(v & v.wrapping_neg()))
+}
+
 /// Native methods for Ljava/lang/Integer;
 pub(crate) const TABLE: &[NativeEntry] = &[
     ne!(
@@ -261,6 +279,30 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(I)I",
         false,
         integer_highest_one_bit
+    ),
+    // wasm:
+    ne!(
+        "Ljava/lang/Integer;",
+        "lowestOneBit",
+        "(I)I",
+        false,
+        integer_lowest_one_bit
+    ),
+    // wasm:
+    ne!(
+        "Ljava/lang/Integer;",
+        "numberOfLeadingZeros",
+        "(I)I",
+        false,
+        integer_number_of_leading_zeros
+    ),
+    // wasm:
+    ne!(
+        "Ljava/lang/Integer;",
+        "numberOfTrailingZeros",
+        "(I)I",
+        false,
+        integer_number_of_trailing_zeros
     ),
     ne!(
         "Ljava/lang/Integer;",

@@ -214,6 +214,8 @@ pub(crate) fn sys_get_property(vm: &mut Vm, args: &[JValue]) -> R {
         "path.separator" => Some(if cfg!(windows) { ";" } else { ":" }),
         "os.name" => Some(std::env::consts::OS),
         "os.arch" => Some(std::env::consts::ARCH),
+        // wasm: Android Dalvik default for extensions like MangaDex (`"Tachiyomi " + System.getProperty("http.agent")`).
+        "http.agent" => Some("Dalvik/2.1.0 (Linux; U; Android 14; Pixel 8 Build/AP2A.240905.003)"),
         _ => None,
     };
     match value {

@@ -129,6 +129,7 @@ Other `fd_*` return `EBADF`; `path_*` return `ENOSYS`.
 |---|---|---|
 | `open` | `apkBase64`, `prefs?`, `defaultUserAgent?`, `logLevel?` | `{ handle, manifest }` |
 | `sources` | — | `Source[]` |
+| `headers` | `sourceId` | `{ headers: [[name, value], ...] }` |
 | `popular` / `latest` | `sourceId`, `page` | `MangaPage` |
 | `filters` | `sourceId` | `FilterDef[]` |
 | `search` | `sourceId`, `query`, `page`, `filters` | `MangaPage` |

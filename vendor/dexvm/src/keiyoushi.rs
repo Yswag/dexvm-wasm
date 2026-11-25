@@ -1380,7 +1380,37 @@ impl Keiyoushi {
     /// Extensions without decrypt interceptors simply return the raw bytes;
     /// the request carries no extra headers beyond what the extension's
     /// client and the registered host-header resolver add.
+    // wasm: resolve `HttpSource.headers` (`headersBuilder()` + `configureHeaders()`),
+    // filling `User-Agent` from `default_user_agent` only when absent or empty.
+    pub fn source_headers(&mut self, src: &Source) -> Result<Vec<(String, String)>, JvmError> {
+        let hdrs = self
+            .ctx
+            .invoke_on(src.inst, "getHeaders", "()Lokhttp3/Headers;", &[])?;
+        let mut entries = match self.ctx.vm().payload_of(hdrs) {
+            Some(Native::Headers(h)) => h,
+            _ => Vec::new(),
+        };
+        if let Some(ua) = self
+            .ctx
+            .vm()
+            .default_user_agent
+            .as_ref()
+            .filter(|s| !s.is_empty())
+            .cloned()
+        {
+            if !entries
+                .iter()
+                .any(|(k, v)| k.eq_ignore_ascii_case("User-Agent") && !v.is_empty())
+            {
+                entries.retain(|(k, _)| !k.eq_ignore_ascii_case("User-Agent"));
+                entries.push(("User-Agent".to_string(), ua));
+            }
+        }
+        Ok(entries)
+    }
+
     pub fn image_data(&mut self, src: &Source, url: &str) -> Result<Vec<u8>, JvmError> {
+        let headers = self.source_headers(src).unwrap_or_default();
         let client = self
             .ctx
             .invoke_on(src.inst, "getClient", "()Lokhttp3/OkHttpClient;", &[])?;
@@ -1391,7 +1421,7 @@ impl Keiyoushi {
             Some(Native::Request {
                 url: url.to_string(),
                 method: "GET".to_string(),
-                headers: Vec::new(),
+                headers,
                 body: None,
             }),
         ));

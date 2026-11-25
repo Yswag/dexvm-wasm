@@ -1231,6 +1231,20 @@ pub(super) fn setskt_create_builder(vm: &mut Vm, _args: &[JValue]) -> R {
 // ---------------------------------------------------------------------------
 
 pub(super) fn mapskt_get_value(vm: &mut Vm, args: &[JValue]) -> R {
+    // wasm: JsonObject implements Map<String, JsonElement> (used by ext-lib 1.6 `memo.getValue(...)`).
+    if let Some(Native::Json(crate::vm::object::JsonVal::Object(entries))) = payload(vm, args[0]) {
+        let entries = entries.clone();
+        let needle = jstr(vm, args[1])?;
+        for (k, v) in entries {
+            if k == needle {
+                return crate::vm::native::serialization::alloc_json_node(vm, &v);
+            }
+        }
+        return Err(NatErr::Throw(vm.throwable_of(
+            "Ljava/util/NoSuchElementException;",
+            "Key is missing in the map.",
+        )));
+    }
     let entries = match payload(vm, args[0]) {
         Some(Native::Map(entries)) => entries.clone(),
         _ => return Err(npe(vm)),

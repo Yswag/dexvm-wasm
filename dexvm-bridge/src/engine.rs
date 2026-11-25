@@ -351,6 +351,22 @@ fn base_url_of(k: &mut Keiyoushi, src: &Source) -> Option<String> {
 }
 
 fn resolve_image_url(k: &mut Keiyoushi, src: &Source, p: &PageRef) -> String {
+    // Mihon HttpSource: when page.imageUrl is already populated, use it directly
+    // without calling getImageUrl / fetchImageUrl.
+    if !p.image_url.is_empty() {
+        return p.image_url.clone();
+    }
+    const GET_IMG_CORO: &str =
+        "(Leu/kanade/tachiyomi/source/model/Page;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;";
+    const GET_IMG_SYNC: &str = "(Leu/kanade/tachiyomi/source/model/Page;)Ljava/lang/String;";
+    if k.has_dex_method(src, "getImageUrl", GET_IMG_CORO)
+        || k.has_dex_method(src, "getImageUrl", GET_IMG_SYNC)
+    {
+        if let Some(s) = k.try_get_image_url(src, p) {
+            return s;
+        }
+        return p.image_url.clone();
+    }
     if let Ok(pj) = page_obj(k, p) {
         let sig = "(Leu/kanade/tachiyomi/source/model/Page;)Lrx/Observable;";
         if let Ok(v) = k.ctx().invoke_on(src.inst(), "fetchImageUrl", sig, &[pj]) {
@@ -369,9 +385,6 @@ fn resolve_image_url(k: &mut Keiyoushi, src: &Source, p: &PageRef) -> String {
                 }
             }
         }
-    }
-    if let Some(s) = k.try_get_image_url(src, p) {
-        return s;
     }
     p.image_url.clone()
 }
@@ -421,7 +434,8 @@ fn image_response(
         ) {
             Ok(r2) => r2,
             Err(e) => {
-                log::debug!("bridge: getImageRequest/imageRequest failed ({e}); falling back to a bare GET");
+                log::debug!("bridge: getImageRequest/imageRequest failed ({e}); falling back to GET(url, source.headers)");
+                let headers = k.source_headers(src).unwrap_or_default();
                 let cid = k.ctx().vm().ensure_class_by_desc("Lokhttp3/Request;")?;
                 let inst = k.ctx().vm().arena.alloc(
                     cid,
@@ -429,7 +443,7 @@ fn image_response(
                     Some(Native::Request {
                         url: url.to_string(),
                         method: "GET".to_string(),
-                        headers: Vec::new(),
+                        headers,
                         body: None,
                     }),
                 );
@@ -568,13 +582,7 @@ fn do_popular(e: &mut Engine, src: &Source, page: i32) -> Result<dexvm::keiyoush
             .popular_coro(src, page)
             .map_err(|er| e.k.describe_error(&er));
     }
-    match e.k.popular(src, page) {
-        Ok(v) => Ok(v),
-        Err(first) => match e.k.popular_coro(src, page) {
-            Ok(v) => Ok(v),
-            Err(second) => Err(both(&mut e.k, first, second)),
-        },
-    }
+    e.k.popular(src, page).map_err(|er| e.k.describe_error(&er))
 }
 
 fn do_latest(e: &mut Engine, src: &Source, page: i32) -> Result<dexvm::keiyoushi::MangaPages, String> {
@@ -584,13 +592,7 @@ fn do_latest(e: &mut Engine, src: &Source, page: i32) -> Result<dexvm::keiyoushi
             .latest_coro(src, page)
             .map_err(|er| e.k.describe_error(&er));
     }
-    match e.k.latest(src, page) {
-        Ok(v) => Ok(v),
-        Err(first) => match e.k.latest_coro(src, page) {
-            Ok(v) => Ok(v),
-            Err(second) => Err(both(&mut e.k, first, second)),
-        },
-    }
+    e.k.latest(src, page).map_err(|er| e.k.describe_error(&er))
 }
 
 fn do_search(
@@ -606,13 +608,8 @@ fn do_search(
             .search_coro(src, page, query, filters)
             .map_err(|er| e.k.describe_error(&er));
     }
-    match e.k.search(src, page, query, filters) {
-        Ok(v) => Ok(v),
-        Err(first) => match e.k.search_coro(src, page, query, filters) {
-            Ok(v) => Ok(v),
-            Err(second) => Err(both(&mut e.k, first, second)),
-        },
-    }
+    e.k.search(src, page, query, filters)
+        .map_err(|er| e.k.describe_error(&er))
 }
 
 fn do_details(e: &mut Engine, src: &Source, m: &Manga) -> Result<Manga, String> {
@@ -654,13 +651,7 @@ fn do_pages(e: &mut Engine, src: &Source, c: &Chapter) -> Result<Vec<PageRef>, S
             .pages_coro(src, c)
             .map_err(|er| e.k.describe_error(&er));
     }
-    match e.k.pages(src, c) {
-        Ok(v) => Ok(v),
-        Err(first) => match e.k.pages_coro(src, c) {
-            Ok(v) => Ok(v),
-            Err(second) => Err(both(&mut e.k, first, second)),
-        },
-    }
+    e.k.pages(src, c).map_err(|er| e.k.describe_error(&er))
 }
 
 /// Attaches the last host HTTP error (if any) to a message.
@@ -686,6 +677,7 @@ pub fn dispatch(op: &str, req: &Value) -> R<Value> {
             let h = handle_of(req)?;
             match op {
                 "sources" => with_engine(h, |e| { let srcs = sources_of(e)?; Ok(sources_json(&mut e.k, &srcs)) }),
+                "headers" => with_engine(h, |e| op_headers(e, req)),
                 "popular" | "latest" => with_engine(h, |e| op_list(e, req, op)),
                 "filters" => with_engine(h, |e| op_filters(e, req)),
                 "search" => with_engine(h, |e| op_search(e, req)),
@@ -980,6 +972,17 @@ fn op_pages(e: &mut Engine, req: &Value) -> R<Value> {
     }
 }
 
+fn op_headers(e: &mut Engine, req: &Value) -> R<Value> {
+    let id = id_arg(req);
+    let src = source_by_id(e, id)?;
+    match e.k.source_headers(&src) {
+        Ok(hdrs) => Ok(json!({
+            "headers": hdrs.iter().map(|(k, v)| json!([k, v])).collect::<Vec<_>>(),
+        })),
+        Err(er) => Err(java_err(&mut e.k, er)),
+    }
+}
+
 fn op_image_url(e: &mut Engine, req: &Value) -> R<Value> {
     let id = id_arg(req);
     let page = page_from(req.get("page").unwrap_or(&Value::Null));
@@ -1002,7 +1005,9 @@ fn op_image_request(e: &mut Engine, req: &Value) -> R<Value> {
     // request as it leaves the interceptors and answers with an empty 200, so
     // decrypt/auth interceptors may throw here — the captured request is what
     // we are after.
-    if image_response(&mut e.k, &src, &page, &url).is_err() {
+    let _ = image_response(&mut e.k, &src, &page, &url);
+    let captured_empty = CAPTURE.with(|c| c.borrow().as_ref().map_or(true, |cap| cap.url.is_empty()));
+    if captured_empty {
         let _ = e.k.image_data(&src, &url);
     }
     let cap = CAPTURE.with(|c| c.borrow_mut().take());

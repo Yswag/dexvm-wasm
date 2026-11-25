@@ -105,6 +105,35 @@ pub(crate) fn long_bit_count(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Int(long_of(vm, args[0]).count_ones() as i32))
 }
 
+// wasm:
+pub(crate) fn long_number_of_leading_zeros(vm: &mut Vm, args: &[JValue]) -> R {
+    let v = long_of(vm, args[0]) as u64;
+    Ok(JValue::Int(v.leading_zeros() as i32))
+}
+
+// wasm:
+pub(crate) fn long_number_of_trailing_zeros(vm: &mut Vm, args: &[JValue]) -> R {
+    let v = long_of(vm, args[0]) as u64;
+    Ok(JValue::Int(v.trailing_zeros() as i32))
+}
+
+// wasm:
+pub(crate) fn long_highest_one_bit(vm: &mut Vm, args: &[JValue]) -> R {
+    let v = long_of(vm, args[0]) as u64;
+    let out = if v == 0 {
+        0i64
+    } else {
+        (1u64 << (63 - v.leading_zeros())) as i64
+    };
+    Ok(JValue::Long(out))
+}
+
+// wasm:
+pub(crate) fn long_lowest_one_bit(vm: &mut Vm, args: &[JValue]) -> R {
+    let v = long_of(vm, args[0]);
+    Ok(JValue::Long(v & v.wrapping_neg()))
+}
+
 pub(crate) fn long_signum(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(JValue::Long(long_of(vm, args[0]).signum()))
 }
@@ -169,6 +198,38 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(J)I",
         false,
         long_bit_count
+    ),
+    // wasm:
+    ne!(
+        "Ljava/lang/Long;",
+        "numberOfLeadingZeros",
+        "(J)I",
+        false,
+        long_number_of_leading_zeros
+    ),
+    // wasm:
+    ne!(
+        "Ljava/lang/Long;",
+        "numberOfTrailingZeros",
+        "(J)I",
+        false,
+        long_number_of_trailing_zeros
+    ),
+    // wasm:
+    ne!(
+        "Ljava/lang/Long;",
+        "highestOneBit",
+        "(J)J",
+        false,
+        long_highest_one_bit
+    ),
+    // wasm:
+    ne!(
+        "Ljava/lang/Long;",
+        "lowestOneBit",
+        "(J)J",
+        false,
+        long_lowest_one_bit
     ),
     ne!("Ljava/lang/Long;", "signum", "(J)I", false, long_signum),
     ne!("Ljava/lang/Long;", "intValue", "()I", true, long_int_value),
