@@ -184,6 +184,66 @@ fn regex_find_default(vm: &mut Vm, args: &[JValue]) -> R {
     )
 }
 
+// wasm: convert a JVM UTF-16 code-unit index into a UTF-8 byte offset.
+fn utf16_index_to_byte(s: &str, utf16_idx: usize) -> usize {
+    if utf16_idx == 0 {
+        return 0;
+    }
+    let mut u16_pos = 0usize;
+    for (byte_idx, ch) in s.char_indices() {
+        if u16_pos >= utf16_idx {
+            return byte_idx;
+        }
+        u16_pos += ch.len_utf16();
+    }
+    s.len()
+}
+
+// wasm: Regex.findAll$default returns a Sequence<MatchResult>, not a single MatchResult.
+fn regex_find_all_default(vm: &mut Vm, args: &[JValue]) -> R {
+    let re = match payload(vm, args[0]) {
+        Some(Native::Pattern { re, .. }) => re.clone(),
+        _ => return Err(npe(vm)),
+    };
+    let text = charseq_of(vm, args[1])?;
+    let start_u16 = if int_of(vm, args[3]) & 2 != 0 {
+        0
+    } else {
+        int_of(vm, args[2]).max(0) as usize
+    };
+    let start_byte = utf16_index_to_byte(&text, start_u16);
+    let mut matches = Vec::new();
+    for matched in re.captures_iter(&text).flatten() {
+        let Some(m0) = matched.get(0) else {
+            continue;
+        };
+        if m0.start() < start_byte {
+            continue;
+        }
+        let match_start = m0.start();
+        let match_end = m0.end();
+        let groups = match_groups(&matched);
+        let obj = alloc(
+            vm,
+            "Lkotlin/text/MatcherMatchResult;",
+            Native::Matcher(MatcherState {
+                pattern: re.clone(),
+                text: text.clone(),
+                pos: match_end,
+                last: Some((match_start, match_end)),
+                groups,
+            }),
+        )?;
+        matches.push(obj);
+    }
+    alloc(vm, "Lkotlin/sequences/Sequence;", Native::List(matches))
+}
+
+// wasm: Regex.findAll(CharSequence, int) — instance variant of findAll$default.
+fn regex_find_all(vm: &mut Vm, args: &[JValue]) -> R {
+    regex_find_all_default(vm, &[args[0], args[1], args[2], JValue::Int(0)])
+}
+
 /// Capture ranges of a fancy_regex match in Kotlin `MatchResult.groupValues`
 /// order: index 0 is the whole match, then one entry per capturing group
 /// (None for unmatched optional groups).
@@ -2040,7 +2100,8 @@ pub(crate) const KOTLIN_TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/text/Regex;", "matchEntire", "(Ljava/lang/CharSequence;)Lkotlin/text/MatchResult;", true, regex_match_entire),
     ne!("Lkotlin/text/Regex;", "containsMatchIn", "(Ljava/lang/CharSequence;)Z", true, regex_contains_match_in),
     ne!("Lkotlin/text/Regex;", "find$default", "(Lkotlin/text/Regex;Ljava/lang/CharSequence;IILjava/lang/Object;)Lkotlin/text/MatchResult;", false, regex_find_default),
-    ne!("Lkotlin/text/Regex;", "findAll$default", "(Lkotlin/text/Regex;Ljava/lang/CharSequence;IILjava/lang/Object;)Lkotlin/sequences/Sequence;", false, regex_find_default),
+    ne!("Lkotlin/text/Regex;", "findAll$default", "(Lkotlin/text/Regex;Ljava/lang/CharSequence;IILjava/lang/Object;)Lkotlin/sequences/Sequence;", false, regex_find_all_default),
+    ne!("Lkotlin/text/Regex;", "findAll", "(Ljava/lang/CharSequence;I)Lkotlin/sequences/Sequence;", true, regex_find_all),
     ne!("Lkotlin/text/Regex;", "split", "(Ljava/lang/CharSequence;I)Ljava/util/List;", true, regex_split),
     ne!("Lkotlin/text/Regex;", "toString", "()Ljava/lang/String;", true, regex_to_string),
     ne!("Lkotlin/text/StringsKt;", "append", "(Ljava/lang/StringBuilder;[Ljava/lang/String;)Ljava/lang/StringBuilder;", false, strings_append_array),

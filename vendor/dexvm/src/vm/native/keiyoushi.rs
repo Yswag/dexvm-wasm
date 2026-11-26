@@ -1270,7 +1270,12 @@ pub(crate) fn filter_separator_init(vm: &mut Vm, args: &[JValue]) -> R {
 
 pub(crate) fn filter_text_init(vm: &mut Vm, args: &[JValue]) -> R {
     let name = jstr(vm, args[1]).unwrap_or_default();
-    let default = jstr(vm, args[2]).unwrap_or_default();
+    // wasm: handle 1-arg Filter$Text.<init>(String) without out-of-bounds panic.
+    let default = args
+        .get(2)
+        .copied()
+        .and_then(|v| jstr(vm, v).ok())
+        .unwrap_or_default();
     let f = Native::SFilter {
         name,
         state: 0,
@@ -1284,7 +1289,7 @@ pub(crate) fn filter_text_init(vm: &mut Vm, args: &[JValue]) -> R {
 
 pub(crate) fn filter_tristate_init(vm: &mut Vm, args: &[JValue]) -> R {
     let name = jstr(vm, args[1]).unwrap_or_default();
-    let state = int_of(vm, args[2]);
+    let state = args.get(2).copied().map(|v| int_of(vm, v)).unwrap_or(0);
     set_filter_payload(vm, args[0], filter_new(name, false, state))
 }
 
@@ -1300,7 +1305,8 @@ pub(crate) fn filter_select_init(vm: &mut Vm, args: &[JValue]) -> R {
         }
         _ => Vec::new(),
     };
-    let state = int_of(vm, args[3]);
+    // wasm: handle 2-arg Filter$Select.<init>(String, String[]) without out-of-bounds panic.
+    let state = args.get(3).copied().map(|v| int_of(vm, v)).unwrap_or(0);
     let f = Native::SFilter {
         name,
         state,
@@ -1464,6 +1470,12 @@ fn filter_sort_init(vm: &mut Vm, args: &[JValue]) -> R {
         Some(Native::Array(ArrayData::Obj(values))) => values.clone(),
         _ => return Err(npe(vm)),
     };
+    // wasm: normalize DEX Int(0) null ref for default-null Selection.
+    let sel = args
+        .get(3)
+        .copied()
+        .filter(|v| !v.is_null_ref())
+        .unwrap_or(JValue::Null);
     set_filter_payload(
         vm,
         args[0],
@@ -1471,7 +1483,7 @@ fn filter_sort_init(vm: &mut Vm, args: &[JValue]) -> R {
             name,
             state: 0,
             is_checked: false,
-            children: vec![args[3]],
+            children: vec![sel],
             options,
             text_value: String::new(),
         },
@@ -1514,9 +1526,10 @@ pub(crate) fn filter_group_state_obj(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(list)
 }
 
+// wasm: Mihon Filter.TriState.STATE_EXCLUDE == 2 (0=ignore, 1=include, 2=exclude).
 pub(crate) fn filter_tristate_is_excluded(vm: &mut Vm, args: &[JValue]) -> R {
     match payload(vm, args[0]) {
-        Some(Native::SFilter { state, .. }) => Ok(JValue::Int(i32::from(state == &-1))),
+        Some(Native::SFilter { state, .. }) => Ok(JValue::Int(i32::from(*state == 2))),
         _ => Err(npe(vm)),
     }
 }
@@ -1643,6 +1656,11 @@ pub(crate) fn requests_kt_get_default(vm: &mut Vm, args: &[JValue]) -> R {
 // ---------------------------------------------------------------------------
 // eu.kanade network helpers (from OkHttp shim)
 // ---------------------------------------------------------------------------
+
+// wasm: default HttpSource.getFilterList() -> empty FilterList.
+pub(crate) fn http_source_get_filter_list(vm: &mut Vm, _args: &[JValue]) -> R {
+    alloc(vm, FILTER_LIST, Native::SFilterList(Vec::new()))
+}
 
 pub(crate) fn http_source_get_network(vm: &mut Vm, _args: &[JValue]) -> R {
     alloc(
@@ -1793,6 +1811,7 @@ pub const KEIYOUSHI_TABLE: &[NativeEntry] = &[
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "getName", "()Ljava/lang/String;", true, http_source_get_name),
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "getId", "()J", true, http_source_get_id),
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "getSupportsLatest", "()Z", true, http_source_get_supports_latest),
+    ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "getFilterList", "()Leu/kanade/tachiyomi/source/model/FilterList;", true, http_source_get_filter_list),
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "fetchSearchManga", "(ILjava/lang/String;Leu/kanade/tachiyomi/source/model/FilterList;)Lrx/Observable;", true, http_source_fetch_search),
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "fetchPopularManga", "(I)Lrx/Observable;", true, http_source_fetch_popular),
     ne!("Leu/kanade/tachiyomi/source/online/HttpSource;", "fetchMangaDetails", "(Leu/kanade/tachiyomi/source/model/SManga;)Lrx/Observable;", true, http_source_fetch_details),

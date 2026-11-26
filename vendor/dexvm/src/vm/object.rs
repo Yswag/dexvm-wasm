@@ -164,6 +164,8 @@ pub enum PreferenceValue {
     Int(i32),
     Long(i64),
     Float(f32),
+    // wasm: SharedPreferences string set (MultiSelectListPreference).
+    StringSet(Vec<String>),
 }
 
 #[derive(Debug, Clone)]

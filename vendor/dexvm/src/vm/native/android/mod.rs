@@ -90,6 +90,14 @@ fn encode_shared_preferences(
                     out.push(4);
                     out.extend_from_slice(&value.to_bits().to_le_bytes());
                 }
+                // wasm: tag 5 = StringSet.
+                PreferenceValue::StringSet(values) => {
+                    out.push(5);
+                    pref_u32(&mut out, values.len())?;
+                    for item in values {
+                        pref_bytes(&mut out, item.as_bytes())?;
+                    }
+                }
             }
         }
     }
@@ -166,6 +174,15 @@ fn decode_shared_preferences(
                 4 => PreferenceValue::Float(f32::from_bits(u32::from_le_bytes(
                     reader.take(4)?.try_into().map_err(|_| pref_invalid())?,
                 ))),
+                // wasm: tag 5 = StringSet.
+                5 => {
+                    let count = reader.u32()? as usize;
+                    let mut items = Vec::with_capacity(count);
+                    for _ in 0..count {
+                        items.push(reader.string()?);
+                    }
+                    PreferenceValue::StringSet(items)
+                }
                 _ => return Err(pref_invalid()),
             };
             values.insert(key, value);
@@ -319,6 +336,11 @@ pub(crate) fn shared_prefs_get_all(vm: &mut Vm, args: &[JValue]) -> R {
             PreferenceValue::Long(l) => JValue::Long(l),
             PreferenceValue::Float(f) => JValue::Float(f),
             PreferenceValue::String(s) => new_str(vm, &s),
+            // wasm: expose StringSet as a Java Set<String>.
+            PreferenceValue::StringSet(items) => {
+                let elems = items.iter().map(|s| vm.alloc_string(s)).collect();
+                set_alloc(vm, elems)?
+            }
         };
         entries.push((key, value));
     }
@@ -335,8 +357,10 @@ pub(crate) fn shared_prefs_contains(vm: &mut Vm, args: &[JValue]) -> R {
     )))
 }
 
-/// `SharedPreferences.getStringSet`: stored values are '\n'-joined strings;
-/// the default (and missing keys) fall back to `args[2]` as a real Set.
+/// `SharedPreferences.getStringSet`: returns a real `Set<String>` for
+/// `PreferenceValue::StringSet` (and falls back to '\n'-joined `String` for
+/// legacy persisted values); missing keys return `args[2]`.
+// wasm: native StringSet support.
 pub(crate) fn shared_prefs_get_string_set(vm: &mut Vm, args: &[JValue]) -> R {
     let name = shared_prefs_name(vm, args[0])?;
     let key = jstr(vm, args[1])?;
@@ -344,12 +368,13 @@ pub(crate) fn shared_prefs_get_string_set(vm: &mut Vm, args: &[JValue]) -> R {
         .shared_preferences
         .get(&name)
         .and_then(|p| p.get(&key))
-        .and_then(|v| match v {
-            PreferenceValue::String(s) => Some(s.clone()),
-            _ => None,
-        });
+        .cloned();
     match value {
-        Some(s) => {
+        Some(PreferenceValue::StringSet(items)) => {
+            let elems = items.iter().map(|s| vm.alloc_string(s)).collect();
+            set_alloc(vm, elems)
+        }
+        Some(PreferenceValue::String(s)) => {
             let items = s
                 .split('\n')
                 .filter(|line| !line.is_empty())
@@ -357,7 +382,7 @@ pub(crate) fn shared_prefs_get_string_set(vm: &mut Vm, args: &[JValue]) -> R {
                 .collect();
             set_alloc(vm, items)
         }
-        None => Ok(args[2]),
+        _ => Ok(args[2]),
     }
 }
 
@@ -1768,15 +1793,17 @@ fn uri_get_encoded_query(vm: &mut Vm, args: &[JValue]) -> R {
 // android.content leftovers
 // ---------------------------------------------------------------------------
 
-/// `SharedPreferences$Editor.putStringSet`: stored as a '\n'-joined string
-/// (the host preference store has no set type).
+/// `SharedPreferences$Editor.putStringSet`: stores a real `StringSet`.
+// wasm: native StringSet support.
 fn editor_put_string_set(vm: &mut Vm, args: &[JValue]) -> R {
+    if args[2].is_null_ref() {
+        return editor_remove(vm, args);
+    }
     let values = coll_elems(vm, args[2])?
         .into_iter()
         .map(|v| jstr(vm, v))
-        .collect::<Result<Vec<_>, NatErr>>()?
-        .join("\n");
-    editor_put(vm, args, PreferenceValue::String(values))
+        .collect::<Result<Vec<_>, NatErr>>()?;
+    editor_put(vm, args, PreferenceValue::StringSet(values))
 }
 
 /// `ContextWrapper.getExternalCacheDir() -> File`: a real per-VM host dir.

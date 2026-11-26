@@ -18,6 +18,7 @@ Update this table on every release. "Passing" means
 | 2026-11-26 | v0.2.6 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; new `headers` op, `imageRequest` header consistency & 0-fetch when `page.imageUrl` is set, `System.getProperty("http.agent")` Dalvik default, Jsoup `Element.children()` element-only + `MapsKt.getValue(JsonObject)` (GoDa `mangaUpdate` live), `Integer`/`Long` bit helpers, `fetchImage` 1-request fast path when `page.imageUrl` is set, `TimeZone.getID()`/`getRawOffset()`/`getOffset(long)`; 31/31 unit tests pass |
 | 2026-11-26 | v0.2.7 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; OkHttp `Request.Builder.tag(...)` / `Request.tag(...)` (`Class`, `KClass`, `Object`) preserved across `build()`/`newBuilder()`/interceptors so keiyoushi `BrowserHeaders` injects `Referer`/`Accept`/`Sec-Fetch-*`, plus `fetchImage` throws `HttpException: HTTP <code>` on non-2xx responses; 34/34 unit tests pass |
 | 2026-11-26 | v0.2.8 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; `java.security` P-256 EC / `ECDH` (`KeyPairGenerator`, `AlgorithmParameters`, `ECParameterSpec`/`EllipticCurve`/`ECFieldFp`/`ECPoint`, `KeyFactory`, `KeyAgreement`), `BigInteger(int, byte[])`, `AES/CTR/NoPadding`, `AES-128-GCM`, `Mac.update`/`doFinal()`/`getMacLength()`, `okio.Buffer.copyTo`/`BufferedSource.readAll`, `HttpUrl.queryParameter` percent-decoding, `ArraysKt.takeLast`/`sort`; **`zh.bilibilimanga` v1.6.0 passes full live flow** (`popular` → `mangaUpdate` → `pages` → `fetchImage`, including encrypted `cpx` AVIF decryption to `ftypavif`); 40/40 unit tests pass |
+| 2026-11-26 | v0.2.9 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; real `FilterList` subclass mutation (`getFilterList()` + all 8 `FilterDef`/`FilterState` kinds, nested `Group`, `Sort.Selection`, `TriState.isExcluded == 2`), `PreferenceValue::StringSet` (`setPreference`/`exportPrefs`/`open.prefs`/`getStringSet`), `Regex.findAll` returning `Sequence<MatchResult>` (**`zh.comicabc` v1.6.2 `pages` live**), RFC 6265 cookie domain-match / port stripping / `Cookie` header merging; **`zh.manhuagui` v1.6.2 filtered `search` live**; 45/45 unit tests pass |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
@@ -417,6 +418,16 @@ locks in these behaviors without requiring an external APK.
    `ClassCastException` on nullable `Boolean?` DTO fields (e.g. **XCOMIC v1.6.11**).
 * **Offline repro tests**: `test/v023.test.mjs` covers all 5 fixes (6/6 passing;
   17/17 total unit tests).
+
+### Cookie jar semantics & OkHttp `BridgeInterceptor` (2026-11-26)
+
+* **Domain matching (RFC 6265 §5.1.3)**:
+  * Cookies with a `Domain` attribute (from `Set-Cookie: ...; Domain=.example.com` / `Domain=example.com`, or seeded via the `cookies` op with a leading dot like `[".example.com", "cf_clearance", "..."]`) are stored as domain-scoped keys (`".example.com"`) and sent to `example.com` as well as any non-IP subdomain (`www.example.com`, `a.b.example.com`).
+  * Cookies without a `Domain` attribute (or seeded without a leading dot, e.g. `["www.example.com", "sid", "1"]` or `["127.0.0.1:52987", "sid", "1"]`) are host-only and match only that exact host.
+  * Ports are stripped consistently in both `domain_key` and `cookie_header` (cookies are port-independent per RFC 6265).
+* **Existing `Cookie` header vs. OkHttp `BridgeInterceptor`**:
+  * In OkHttp (`okhttp3.internal.http.BridgeInterceptor`), whenever `cookieJar.loadForRequest(url)` returns a non-empty list, OkHttp calls `requestBuilder.header("Cookie", cookieHeader(cookies))`, which **overwrites** any `Cookie` header already set on the request.
+  * `dexvm-bridge` intentionally **merges** matching jar cookies into an existing `Cookie` header instead of overwriting or skipping: pairs already set by the extension (e.g. `Cookie: a=1`) are preserved, and non-colliding cookies from the jar (e.g. host-seeded `cf_clearance`) are appended into a single `Cookie` header (`Cookie: a=1; cf_clearance=...`). When no jar cookies match, the request's `Cookie` header is left untouched.
 
 ### Background coroutine jobs & `runPending` (2026-11-26, v0.2.4)
 

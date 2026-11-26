@@ -1,8 +1,8 @@
 //! Engine registry + the `op` table.
 
 use dexvm::keiyoushi::{
-    Chapter, FilterDef, FilterKind, FilterState, HttpData, HttpResp, Keiyoushi, Manga, PageRef,
-    Source,
+    Chapter, FilterDef, FilterKind, FilterState, FilterValue, HttpData, HttpResp, Keiyoushi, Manga,
+    PageRef, SortState, Source,
 };
 use dexvm::vm::error::JvmError;
 use dexvm::vm::object::{Native, PreferenceValue};
@@ -62,14 +62,24 @@ fn on_http(req: &HttpData) -> HttpResp {
             req.headers.push(("Referer".to_string(), r));
         }
     }
-    if !req
+    // Merge jar cookies with any request-specified Cookie header (preserving
+    // extension-set pairs while still injecting host-seeded cookies such as
+    // cf_clearance; see COMPAT.md for comparison with OkHttp BridgeInterceptor).
+    let existing_cookie: String = req
         .headers
         .iter()
-        .any(|(k, v)| k.eq_ignore_ascii_case("cookie") && !v.is_empty())
-    {
+        .filter(|(k, v)| k.eq_ignore_ascii_case("cookie") && !v.is_empty())
+        .map(|(_, v)| v.trim())
+        .collect::<Vec<_>>()
+        .join("; ");
+    if existing_cookie.is_empty() {
         if let Some(cookie) = crate::cookies::cookie_header(&req.url) {
+            req.headers.retain(|(k, _)| !k.eq_ignore_ascii_case("cookie"));
             req.headers.push(("Cookie".to_string(), cookie));
         }
+    } else if let Some(merged) = crate::cookies::merge_cookie_header(&existing_cookie, &req.url) {
+        req.headers.retain(|(k, _)| !k.eq_ignore_ascii_case("cookie"));
+        req.headers.push(("Cookie".to_string(), merged));
     }
     let req = &req;
     if CAPTURE.with(|c| c.borrow().is_some()) {
@@ -295,31 +305,79 @@ fn filter_kind_str(k: FilterKind) -> &'static str {
         FilterKind::Separator => "separator",
         FilterKind::Text => "text",
         FilterKind::Select => "select",
+        FilterKind::CheckBox => "checkbox",
         FilterKind::TriState => "tristate",
         FilterKind::Group => "group",
+        FilterKind::Sort => "sort",
+    }
+}
+
+fn filter_value_json(v: &FilterValue) -> Value {
+    match v {
+        FilterValue::None | FilterValue::Group(_) => Value::Null,
+        FilterValue::Index(i) => json!(i),
+        FilterValue::Bool(b) => json!(b),
+        FilterValue::Text(t) => json!(t),
+        FilterValue::Sort(Some(s)) => json!({
+            "index": s.index,
+            "ascending": s.ascending,
+        }),
+        FilterValue::Sort(None) => Value::Null,
     }
 }
 
 fn filter_json(f: &FilterDef) -> Value {
-    json!({
+    let mut obj = json!({
         "kind": filter_kind_str(f.kind),
         "name": f.name,
-        "state": f.state,
+        "state": filter_value_json(&f.state),
         "options": f.options,
-    })
+    });
+    if f.kind == FilterKind::Group {
+        obj["children"] = Value::Array(f.children.iter().map(filter_json).collect());
+    }
+    obj
+}
+
+fn parse_filter_states(arr: &[Value]) -> Vec<FilterState> {
+    let mut out = Vec::with_capacity(arr.len());
+    for item in arr {
+        let name = s(item, "name");
+        let state = if let Some(children) = item.get("children").and_then(|c| c.as_array()) {
+            FilterValue::Group(parse_filter_states(children))
+        } else {
+            match item.get("state") {
+                Some(Value::Bool(b)) => FilterValue::Bool(*b),
+                Some(Value::Number(n)) => FilterValue::Index(n.as_i64().unwrap_or(0) as i32),
+                Some(Value::String(t)) => FilterValue::Text(t.clone()),
+                Some(Value::Object(obj)) => FilterValue::Sort(Some(SortState {
+                    index: obj.get("index").and_then(|x| x.as_i64()).unwrap_or(0) as i32,
+                    ascending: obj
+                        .get("ascending")
+                        .and_then(|x| x.as_bool())
+                        .unwrap_or(false),
+                })),
+                Some(Value::Array(children)) => FilterValue::Group(parse_filter_states(children)),
+                Some(Value::Null) => {
+                    if item.get("kind").and_then(|k| k.as_str()) == Some("sort") {
+                        FilterValue::Sort(None)
+                    } else {
+                        FilterValue::None
+                    }
+                }
+                None => FilterValue::None,
+            }
+        };
+        out.push(FilterState { name, state });
+    }
+    out
 }
 
 fn filters_from(v: &Value) -> Vec<FilterState> {
-    let mut out = Vec::new();
-    if let Some(arr) = v.get("filters").and_then(|f| f.as_array()) {
-        for item in arr {
-            out.push(FilterState {
-                name: s(item, "name"),
-                state: item.get("state").and_then(|x| x.as_i64()).unwrap_or(0) as i32,
-            });
-        }
-    }
-    out
+    v.get("filters")
+        .and_then(|f| f.as_array())
+        .map(|arr| parse_filter_states(arr))
+        .unwrap_or_default()
 }
 
 fn page_obj(k: &mut Keiyoushi, p: &PageRef) -> Result<JValue, JvmError> {
@@ -513,6 +571,11 @@ fn preference_value(v: &Value) -> PreferenceValue {
     match v {
         Value::Bool(b) => PreferenceValue::Bool(*b),
         Value::String(s) => PreferenceValue::String(s.clone()),
+        Value::Array(arr) => PreferenceValue::StringSet(
+            arr.iter()
+                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                .collect(),
+        ),
         Value::Number(n) => {
             if let Some(i) = n.as_i64() {
                 if i >= i32::MIN as i64 && i <= i32::MAX as i64 {
@@ -535,6 +598,7 @@ fn preference_json(v: &PreferenceValue) -> Value {
         PreferenceValue::Int(i) => json!(i),
         PreferenceValue::Long(l) => json!(l),
         PreferenceValue::Float(f) => json!(f),
+        PreferenceValue::StringSet(items) => json!(items),
     }
 }
 
@@ -727,6 +791,9 @@ pub fn dispatch(op: &str, req: &Value) -> R<Value> {
 /// `set` takes `[[host, name, value], ...]` (or an `import` object shaped like
 /// the export); `clear` empties it.
 fn op_cookies(req: &Value) -> R<Value> {
+    if req.get("clear").and_then(|v| v.as_bool()).unwrap_or(false) {
+        crate::cookies::clear();
+    }
     if let Some(set) = req.get("set").and_then(|v| v.as_array()) {
         for item in set {
             let Some(arr) = item.as_array() else { continue };
@@ -743,9 +810,6 @@ fn op_cookies(req: &Value) -> R<Value> {
     }
     if let Some(import) = req.get("import") {
         crate::cookies::import(import);
-    }
-    if req.get("clear").and_then(|v| v.as_bool()).unwrap_or(false) {
-        crate::cookies::clear();
     }
     if let Some(url) = req.get("get").and_then(|v| v.as_str()) {
         return Ok(json!({ "cookie": crate::cookies::cookie_header(url) }));

@@ -1,13 +1,13 @@
 {
   "name": "dexvm-wasm",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "type": "module",
   "description": "dexvm (Mihon/keiyoushi extension DEX VM) compiled to wasm32-wasip1, plus a zero-dependency loader",
   "license": "Apache-2.0",
   "scripts": {
     "build:wasm": "scripts/build.sh",
-    "test": "node test/run.mjs fixtures && node --test test/headers.test.mjs test/sleep.test.mjs test/v023.test.mjs test/pending.test.mjs test/v025.test.mjs test/v026.test.mjs test/v027.test.mjs test/v028.test.mjs",
+    "test": "node test/run.mjs fixtures && node --test test/headers.test.mjs test/sleep.test.mjs test/v023.test.mjs test/pending.test.mjs test/v025.test.mjs test/v026.test.mjs test/v027.test.mjs test/v028.test.mjs test/v029.test.mjs",
     "test:all": "node test/run.mjs all"
   },
   "repository": {

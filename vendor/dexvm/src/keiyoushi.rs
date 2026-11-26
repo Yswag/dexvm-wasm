@@ -21,7 +21,7 @@ use std::rc::Rc;
 use crate::context::{Context, ContextError, SandboxOptions, SettingDefinition, SettingValue};
 use crate::manifest::{AppManifest, ManifestError};
 use crate::vm::error::JvmError;
-use crate::vm::native::keiyoushi::{FILTER, FILTER_LIST, SCHAPTER, SMANGA};
+use crate::vm::native::keiyoushi::{FILTER_LIST, SCHAPTER, SMANGA};
 use crate::vm::object::Native;
 use crate::vm::value::JValue;
 use crate::vm::Vm;
@@ -91,16 +91,40 @@ pub enum FilterKind {
     Separator,
     Text,
     Select,
+    // wasm: distinguish CheckBox and Sort from Plain.
+    CheckBox,
     TriState,
     Group,
+    Sort,
+}
+
+// wasm: Sort filter Selection(index, ascending).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SortState {
+    pub index: i32,
+    pub ascending: bool,
+}
+
+// wasm: typed filter state shared by FilterDef (output) and FilterState (input).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum FilterValue {
+    #[default]
+    None,
+    Index(i32),
+    Bool(bool),
+    Text(String),
+    Sort(Option<SortState>),
+    Group(Vec<FilterState>),
 }
 
 #[derive(Debug, Clone)]
 pub struct FilterDef {
     pub kind: FilterKind,
     pub name: String,
-    pub state: i32,
+    pub state: FilterValue,
     pub options: Vec<String>,
+    // wasm: nested Group children (no longer flattened).
+    pub children: Vec<FilterDef>,
 }
 
 impl Keiyoushi {
@@ -422,7 +446,7 @@ impl Keiyoushi {
         query: &str,
         filters: &[FilterState],
     ) -> Result<MangaPages, JvmError> {
-        let flist = self.build_filter_list(filters)?;
+        let flist = self.build_filter_list(src, filters)?;
         let query_obj = self.ctx.vm().alloc_string(query);
 
         // Rx-style override (M+): fetchSearchManga emits the MangasPage
@@ -675,10 +699,10 @@ impl Keiyoushi {
 }
 
 /// Per-filter state used when building a [`Keiyoushi::search`] call.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct FilterState {
     pub name: String,
-    pub state: i32,
+    pub state: FilterValue,
 }
 
 impl Keiyoushi {
@@ -962,6 +986,7 @@ impl Keiyoushi {
         Ok(out)
     }
 
+    // wasm: preserve Filter kind, typed state, and nested Group children.
     fn read_filters(&mut self, flist: JValue) -> Result<Vec<FilterDef>, JvmError> {
         let items = match self.ctx.vm().payload_of(flist) {
             Some(Native::SFilterList(items)) => items,
@@ -969,52 +994,101 @@ impl Keiyoushi {
         };
         let mut out = Vec::with_capacity(items.len());
         for f in items {
-            let id = f.as_obj();
-            let kind = self.filter_kind(id);
-            if let Some(Native::SFilter {
-                name,
-                state,
-                options,
-                children,
-                ..
-            }) = self.ctx.vm().payload_of(f)
-            {
-                if kind == FilterKind::Group {
-                    out.push(FilterDef {
-                        kind,
-                        name,
-                        state,
-                        options: self.str_options(options)?,
-                    });
-                    for c in children {
-                        let cid = c.as_obj();
-                        let k = self.filter_kind(cid);
-                        if let Some(Native::SFilter {
-                            name,
-                            state,
-                            options,
-                            ..
-                        }) = self.ctx.vm().payload_of(c)
-                        {
-                            out.push(FilterDef {
-                                kind: k,
-                                name,
-                                state,
-                                options: self.str_options(options)?,
-                            });
-                        }
-                    }
-                } else {
-                    out.push(FilterDef {
-                        kind,
-                        name,
-                        state,
-                        options: self.str_options(options)?,
-                    });
-                }
+            if let Some(def) = self.read_filter_item(f)? {
+                out.push(def);
             }
         }
         Ok(out)
+    }
+
+    fn read_filter_item(&mut self, f: JValue) -> Result<Option<FilterDef>, JvmError> {
+        let JValue::Obj(id) = f else {
+            return Ok(None);
+        };
+        let kind = self.filter_kind(id);
+        let Some(Native::SFilter {
+            name,
+            state,
+            is_checked,
+            options,
+            children,
+            text_value,
+        }) = self.ctx.vm().payload_of(f)
+        else {
+            return Ok(None);
+        };
+        match kind {
+            FilterKind::Header | FilterKind::Separator => Ok(Some(FilterDef {
+                kind,
+                name,
+                state: FilterValue::None,
+                options: Vec::new(),
+                children: Vec::new(),
+            })),
+            FilterKind::Select | FilterKind::TriState => Ok(Some(FilterDef {
+                kind,
+                name,
+                state: FilterValue::Index(state),
+                options: self.str_options(options)?,
+                children: Vec::new(),
+            })),
+            FilterKind::CheckBox => Ok(Some(FilterDef {
+                kind,
+                name,
+                state: FilterValue::Bool(is_checked),
+                options: Vec::new(),
+                children: Vec::new(),
+            })),
+            FilterKind::Text => Ok(Some(FilterDef {
+                kind,
+                name,
+                state: FilterValue::Text(text_value),
+                options: Vec::new(),
+                children: Vec::new(),
+            })),
+            FilterKind::Sort => {
+                let sel = children.first().copied().and_then(|v| {
+                    if v.is_null_ref() {
+                        return None;
+                    }
+                    match self.ctx.vm().payload_of(v) {
+                        Some(Native::SortSelection { index, ascending }) => {
+                            Some(SortState { index, ascending })
+                        }
+                        _ => None,
+                    }
+                });
+                Ok(Some(FilterDef {
+                    kind,
+                    name,
+                    state: FilterValue::Sort(sel),
+                    options: self.str_options(options)?,
+                    children: Vec::new(),
+                }))
+            }
+            FilterKind::Group => {
+                let mut child_defs = Vec::with_capacity(children.len());
+                for c in children {
+                    if let Some(def) = self.read_filter_item(c)? {
+                        child_defs.push(def);
+                    }
+                }
+                Ok(Some(FilterDef {
+                    kind,
+                    name,
+                    state: FilterValue::None,
+                    options: Vec::new(),
+                    children: child_defs,
+                }))
+            }
+            FilterKind::Plain => Ok(Some(FilterDef {
+                kind,
+                name,
+                state: FilterValue::Index(state),
+                options: self.str_options(options)?,
+                children: Vec::new(),
+            })),
+        }
     }
 
     fn str_options(&mut self, options: Vec<JValue>) -> Result<Vec<String>, JvmError> {
@@ -1022,11 +1096,22 @@ impl Keiyoushi {
         for o in options {
             if let Some(s) = self.ctx.vm().str_of_jvalue(o) {
                 out.push(s);
+            } else if let JValue::Obj(id) = o {
+                // wasm: Filter.Select<V> may hold non-String options (displayed via toString()).
+                if let Ok(v) = self
+                    .ctx
+                    .invoke_on(id, "toString", "()Ljava/lang/String;", &[])
+                {
+                    if let Some(s) = self.ctx.vm().str_of_jvalue(v) {
+                        out.push(s);
+                    }
+                }
             }
         }
         Ok(out)
     }
 
+    // wasm: match exact Tachiyomi Filter subclass descriptors along the superclass chain.
     fn filter_kind(&mut self, obj: u32) -> FilterKind {
         let mut cid = self.ctx.vm().arena.objects[obj as usize].class;
         loop {
@@ -1039,14 +1124,22 @@ impl Keiyoushi {
             };
             let desc = self.ctx.vm().str_of(desc_id);
             match desc {
+                "Leu/kanade/tachiyomi/source/model/Filter$Header;" => return FilterKind::Header,
+                "Leu/kanade/tachiyomi/source/model/Filter$Separator;" => {
+                    return FilterKind::Separator;
+                }
+                "Leu/kanade/tachiyomi/source/model/Filter$Select;" => return FilterKind::Select,
+                "Leu/kanade/tachiyomi/source/model/Filter$Text;" => return FilterKind::Text,
+                "Leu/kanade/tachiyomi/source/model/Filter$CheckBox;" => {
+                    return FilterKind::CheckBox;
+                }
+                "Leu/kanade/tachiyomi/source/model/Filter$TriState;" => {
+                    return FilterKind::TriState;
+                }
+                "Leu/kanade/tachiyomi/source/model/Filter$Group;" => return FilterKind::Group,
+                "Leu/kanade/tachiyomi/source/model/Filter$Sort;" => return FilterKind::Sort,
+                "Leu/kanade/tachiyomi/source/model/Filter;" => return FilterKind::Plain,
                 s if s == FILTER_LIST => return FilterKind::Plain,
-                s if s.contains("Text") => return FilterKind::Text,
-                s if s.contains("Select") => return FilterKind::Select,
-                s if s.contains("TriState") => return FilterKind::TriState,
-                s if s.contains("Group") => return FilterKind::Group,
-                s if s.contains("Header") => return FilterKind::Plain,
-                s if s.contains("Separator") => return FilterKind::Separator,
-                s if s.ends_with("Filter;") => return FilterKind::Plain,
                 _ => {}
             }
             match sup {
@@ -1098,31 +1191,161 @@ impl Keiyoushi {
         )))
     }
 
-    /// Builds a FilterList object carrying the given per-filter states.
-    fn build_filter_list(&mut self, states: &[FilterState]) -> Result<JValue, JvmError> {
-        let cid = self.ctx.vm().ensure_class_by_desc(FILTER_LIST)?;
-        let mut children = Vec::new();
-        for s in states {
-            let fc = self.ctx.vm().ensure_class_by_desc(FILTER)?;
-            let payload = Native::SFilter {
-                name: s.name.clone(),
-                state: s.state,
-                is_checked: false,
-                children: Vec::new(),
-                options: Vec::new(),
-                text_value: String::new(),
-            };
-            children.push(JValue::Obj(self.ctx.vm().arena.alloc(
-                fc,
-                Vec::new(),
-                Some(payload),
-            )));
+    // wasm: follow Mihon UI — obtain the extension's real FilterList via
+    // getFilterList() and mutate the host-supplied states onto those actual
+    // subclass instances so `is XxxFilter` / `filterIsInstance<T>()` work.
+    fn build_filter_list(
+        &mut self,
+        src: &Source,
+        states: &[FilterState],
+    ) -> Result<JValue, JvmError> {
+        let flist = match self.ctx.invoke_on(
+            src.inst,
+            "getFilterList",
+            "()Leu/kanade/tachiyomi/source/model/FilterList;",
+            &[],
+        ) {
+            Ok(v) if matches!(self.ctx.vm().payload_of(v), Some(Native::SFilterList(_))) => v,
+            Ok(_) | Err(JvmError::Resolution(_)) => {
+                let cid = self.ctx.vm().ensure_class_by_desc(FILTER_LIST)?;
+                JValue::Obj(self.ctx.vm().arena.alloc(
+                    cid,
+                    Vec::new(),
+                    Some(Native::SFilterList(Vec::new())),
+                ))
+            }
+            Err(e) => return Err(e),
+        };
+        if states.is_empty() {
+            return Ok(flist);
         }
-        Ok(JValue::Obj(self.ctx.vm().arena.alloc(
-            cid,
-            Vec::new(),
-            Some(Native::SFilterList(children)),
-        )))
+        let items = match self.ctx.vm().payload_of(flist) {
+            Some(Native::SFilterList(items)) => items,
+            _ => return Ok(flist),
+        };
+        self.apply_filter_states(&items, states)?;
+        Ok(flist)
+    }
+
+    fn filter_name_of(&mut self, item: JValue) -> Option<String> {
+        match self.ctx.vm().payload_of(item) {
+            Some(Native::SFilter { name, .. }) => Some(name),
+            _ => None,
+        }
+    }
+
+    fn apply_filter_states(
+        &mut self,
+        items: &[JValue],
+        states: &[FilterState],
+    ) -> Result<(), JvmError> {
+        let item_names: Vec<String> = items
+            .iter()
+            .map(|&it| self.filter_name_of(it).unwrap_or_default())
+            .collect();
+        let positional = states.len() == items.len()
+            && states
+                .iter()
+                .zip(item_names.iter())
+                .all(|(s, name)| s.name.is_empty() || s.name == *name);
+        if positional {
+            for (&item, st) in items.iter().zip(states.iter()) {
+                self.apply_filter_value(item, &st.state)?;
+            }
+            return Ok(());
+        }
+        let mut used = vec![false; items.len()];
+        for st in states {
+            if st.name.is_empty() {
+                continue;
+            }
+            if let Some(idx) = item_names
+                .iter()
+                .enumerate()
+                .position(|(i, name)| !used[i] && name == &st.name)
+            {
+                used[idx] = true;
+                self.apply_filter_value(items[idx], &st.state)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn apply_filter_value(
+        &mut self,
+        item: JValue,
+        value: &FilterValue,
+    ) -> Result<(), JvmError> {
+        let JValue::Obj(id) = item else {
+            return Ok(());
+        };
+        let kind = self.filter_kind(id);
+        match (kind, value) {
+            (FilterKind::Group, FilterValue::Group(child_states)) => {
+                let children = match self.ctx.vm().payload_of(item) {
+                    Some(Native::SFilter { children, .. }) => children,
+                    _ => return Ok(()),
+                };
+                self.apply_filter_states(&children, child_states)?;
+            }
+            (FilterKind::Select | FilterKind::TriState | FilterKind::Plain, FilterValue::Index(v)) => {
+                if let Some(Native::SFilter { state, .. }) =
+                    self.ctx.vm().arena.objects[id as usize].native.as_mut()
+                {
+                    *state = *v;
+                }
+            }
+            (FilterKind::CheckBox, FilterValue::Bool(b)) => {
+                if let Some(Native::SFilter { is_checked, .. }) =
+                    self.ctx.vm().arena.objects[id as usize].native.as_mut()
+                {
+                    *is_checked = *b;
+                }
+            }
+            (FilterKind::CheckBox, FilterValue::Index(v)) => {
+                if let Some(Native::SFilter { is_checked, .. }) =
+                    self.ctx.vm().arena.objects[id as usize].native.as_mut()
+                {
+                    *is_checked = *v != 0;
+                }
+            }
+            (FilterKind::Text, FilterValue::Text(s)) => {
+                if let Some(Native::SFilter { text_value, .. }) =
+                    self.ctx.vm().arena.objects[id as usize].native.as_mut()
+                {
+                    *text_value = s.clone();
+                }
+            }
+            (FilterKind::Sort, FilterValue::Sort(sel)) => {
+                let sel_val = match sel {
+                    Some(s) => {
+                        let cid = self.ctx.vm().ensure_class_by_desc(
+                            "Leu/kanade/tachiyomi/source/model/Filter$Sort$Selection;",
+                        )?;
+                        JValue::Obj(self.ctx.vm().arena.alloc(
+                            cid,
+                            Vec::new(),
+                            Some(Native::SortSelection {
+                                index: s.index,
+                                ascending: s.ascending,
+                            }),
+                        ))
+                    }
+                    None => JValue::Null,
+                };
+                if let Some(Native::SFilter { children, .. }) =
+                    self.ctx.vm().arena.objects[id as usize].native.as_mut()
+                {
+                    if children.is_empty() {
+                        children.push(sel_val);
+                    } else {
+                        children[0] = sel_val;
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
     }
 
     /// Allocates a shim continuation so suspend-style dex functions
@@ -1171,7 +1394,7 @@ impl Keiyoushi {
         query: &str,
         filters: &[FilterState],
     ) -> Result<MangaPages, JvmError> {
-        let flist = self.build_filter_list(filters)?;
+        let flist = self.build_filter_list(src, filters)?;
         let query_obj = self.ctx.vm().alloc_string(query);
         let cont = self.suspend_cont()?;
         let out = self.ctx.invoke_on(
