@@ -151,17 +151,43 @@ pub(crate) fn key_factory_get_instance(vm: &mut Vm, _args: &[JValue]) -> R {
 }
 
 pub(crate) fn key_factory_generate_public(vm: &mut Vm, args: &[JValue]) -> R {
-    let bytes = match payload(vm, args[1]) {
-        Some(Native::X509KeySpec(bytes)) => bytes.clone(),
-        _ => return Err(npe(vm)),
-    };
-    let (modulus, exponent) =
-        parse_spki(&bytes).ok_or_else(|| NatErr::Throw(vm.err_iae("bad X509 public key")))?;
-    alloc(
-        vm,
-        "Ljava/security/PublicKey;",
-        Native::RsaPublicKey { modulus, exponent },
-    )
+    // wasm: also support ECPublicKeySpec -> ECPublicKey.
+    match payload(vm, args[1]) {
+        Some(Native::X509KeySpec(bytes)) => {
+            let bytes = bytes.clone();
+            let (modulus, exponent) =
+                parse_spki(&bytes).ok_or_else(|| NatErr::Throw(vm.err_iae("bad X509 public key")))?;
+            alloc(
+                vm,
+                "Ljava/security/PublicKey;",
+                Native::RsaPublicKey { modulus, exponent },
+            )
+        }
+        Some(Native::EcPublicKeySpec { x, y, curve }) => {
+            let (x, y, curve) = (x.clone(), y.clone(), curve.clone());
+            alloc(
+                vm,
+                "Ljava/security/interfaces/ECPublicKey;",
+                Native::EcPublicKey { x, y, curve },
+            )
+        }
+        _ => Err(npe(vm)),
+    }
+}
+
+// wasm: KeyFactory.generatePrivate(KeySpec) for ECPrivateKeySpec.
+pub(crate) fn key_factory_generate_private(vm: &mut Vm, args: &[JValue]) -> R {
+    match payload(vm, args[1]) {
+        Some(Native::EcPrivateKeySpec { s, curve }) => {
+            let (s, curve) = (s.clone(), curve.clone());
+            alloc(
+                vm,
+                "Ljava/security/interfaces/ECPrivateKey;",
+                Native::EcPrivateKey { s, curve },
+            )
+        }
+        _ => Err(npe(vm)),
+    }
 }
 
 pub(crate) const TABLE: &[NativeEntry] = &[
@@ -199,5 +225,13 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "(Ljava/security/spec/KeySpec;)Ljava/security/PublicKey;",
         true,
         key_factory_generate_public
+    ),
+    // wasm:
+    ne!(
+        "Ljava/security/KeyFactory;",
+        "generatePrivate",
+        "(Ljava/security/spec/KeySpec;)Ljava/security/PrivateKey;",
+        true,
+        key_factory_generate_private
     ),
 ];

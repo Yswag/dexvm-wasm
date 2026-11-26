@@ -593,6 +593,38 @@ pub(crate) fn http_url_scheme(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(vm.alloc_string(&s))
 }
 
+// wasm: OkHttp HttpUrl percent-decode for query parameters (+ -> space, %XX -> byte).
+fn percent_decode_query(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'%' if i + 2 < bytes.len() => {
+                if let (Some(hi), Some(lo)) = (
+                    (bytes[i + 1] as char).to_digit(16),
+                    (bytes[i + 2] as char).to_digit(16),
+                ) {
+                    out.push(((hi << 4) | lo) as u8);
+                    i += 3;
+                    continue;
+                }
+                out.push(b'%');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 pub(crate) fn http_url_query_parameter(vm: &mut Vm, args: &[JValue]) -> R {
     let url = match payload(vm, args[0]) {
         Some(Native::HttpUrl(url)) => url.clone(),
@@ -601,12 +633,19 @@ pub(crate) fn http_url_query_parameter(vm: &mut Vm, args: &[JValue]) -> R {
     let Some(name) = jstr(vm, args[1]).ok() else {
         return Ok(JValue::Null);
     };
-    let query = url.split('?').nth(1).unwrap_or("");
+    // wasm: strip #fragment and percent-decode query key & value per OkHttp HttpUrl.queryParameter.
+    let query = url
+        .split_once('?')
+        .map(|(_, q)| q.split('#').next().unwrap_or(""))
+        .unwrap_or("");
     let mut out = None;
     for pair in query.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
         if let Some((k, v)) = pair.split_once('=') {
-            if k == name.as_str() {
-                out = Some(v.to_string());
+            if percent_decode_query(k) == name {
+                out = Some(percent_decode_query(v));
                 break;
             }
         }

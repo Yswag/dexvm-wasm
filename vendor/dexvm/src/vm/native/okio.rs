@@ -453,6 +453,95 @@ pub(crate) fn okio_buffer_get(vm: &mut Vm, args: &[JValue]) -> R {
     }
 }
 
+// wasm: okio.Buffer.copyTo(out, offset, byteCount) — non-consuming slice copy.
+fn okio_buffer_copy_to_impl(
+    vm: &mut Vm,
+    src: JValue,
+    dst: JValue,
+    offset: i64,
+    byte_count: i64,
+) -> R {
+    if offset < 0 || byte_count < 0 {
+        return Err(iae(vm, "copyTo: negative offset or byteCount"));
+    }
+    let off = offset as usize;
+    let cnt = byte_count as usize;
+    let Some(end) = off.checked_add(cnt) else {
+        return Err(iae(vm, "copyTo: overflow"));
+    };
+    let slice = {
+        let Some(Native::OkioBuf { bytes, pos }) = payload(vm, src) else {
+            return Err(npe(vm));
+        };
+        let avail = bytes.len().saturating_sub(*pos);
+        if end > avail {
+            return Err(iae(vm, "copyTo: range out of bounds"));
+        }
+        bytes[*pos + off..*pos + end].to_vec()
+    };
+    let Some(Native::OkioBuf { bytes, .. }) = payload_mut(vm, dst) else {
+        return Err(npe(vm));
+    };
+    bytes.extend_from_slice(&slice);
+    Ok(src)
+}
+
+pub(crate) fn okio_buffer_copy_to(vm: &mut Vm, args: &[JValue]) -> R {
+    let offset = long_of(vm, args[2]);
+    let byte_count = long_of(vm, args[3]);
+    okio_buffer_copy_to_impl(vm, args[0], args[1], offset, byte_count)
+}
+
+pub(crate) fn okio_buffer_copy_to_all(vm: &mut Vm, args: &[JValue]) -> R {
+    let avail = match payload(vm, args[0]) {
+        Some(Native::OkioBuf { bytes, pos }) => bytes.len().saturating_sub(*pos) as i64,
+        _ => return Err(npe(vm)),
+    };
+    okio_buffer_copy_to_impl(vm, args[0], args[1], 0, avail)
+}
+
+pub(crate) fn okio_buffer_copy_to_default(vm: &mut Vm, args: &[JValue]) -> R {
+    let mask = int_of(vm, args[4]);
+    let avail = match payload(vm, args[0]) {
+        Some(Native::OkioBuf { bytes, pos }) => bytes.len().saturating_sub(*pos) as i64,
+        _ => return Err(npe(vm)),
+    };
+    let offset = if (mask & 2) != 0 { 0 } else { long_of(vm, args[2]) };
+    let byte_count = if (mask & 4) != 0 {
+        avail.saturating_sub(offset)
+    } else {
+        long_of(vm, args[3])
+    };
+    okio_buffer_copy_to_impl(vm, args[0], args[1], offset, byte_count)
+}
+
+// wasm: okio.BufferedSource.readAll(Sink) / Buffer.readAll(Sink) -> long.
+pub(crate) fn okio_read_all(vm: &mut Vm, args: &[JValue]) -> R {
+    let data = {
+        let Some(Native::OkioBuf { bytes, pos }) = payload_mut(vm, args[0]) else {
+            return Err(npe(vm));
+        };
+        let slice = bytes[*pos..].to_vec();
+        *pos = bytes.len();
+        slice
+    };
+    let count = data.len() as i64;
+    match payload_mut(vm, args[1]) {
+        Some(Native::OkioBuf { bytes, .. }) => {
+            bytes.extend_from_slice(&data);
+            Ok(JValue::Long(count))
+        }
+        Some(Native::OkioSink { bytes, closed, .. }) => {
+            if *closed {
+                return Err(ioe(vm, "closed"));
+            }
+            bytes.extend_from_slice(&data);
+            Ok(JValue::Long(count))
+        }
+        _ => Err(npe(vm)),
+    }
+}
+
 pub(crate) fn lazy_byte_string_companion(vm: &mut Vm) -> JValue {
     alloc(vm, "Lokio/ByteString$Companion;", Native::Opaque).unwrap_or(JValue::Null)
 }
@@ -1048,6 +1137,21 @@ pub(crate) const OKIO_TABLE: &[NativeEntry] = &[
         true,
         okio_exhausted
     ),
+    // wasm:
+    ne!(
+        "Lokio/BufferedSource;",
+        "readAll",
+        "(Lokio/Sink;)J",
+        true,
+        okio_read_all
+    ),
+    ne!(
+        "Lokio/Buffer;",
+        "readAll",
+        "(Lokio/Sink;)J",
+        true,
+        okio_read_all
+    ),
     // wasm: primitive read methods on BufferedSource & Buffer (MANGA Plus ProtoBuf etc.).
     ne!("Lokio/BufferedSource;", "readByte", "()B", true, okio_buffer_read_byte),
     ne!("Lokio/BufferedSource;", "readInt", "()I", true, okio_read_int),
@@ -1072,6 +1176,28 @@ pub(crate) const OKIO_TABLE: &[NativeEntry] = &[
     ne!("Lokio/Buffer$UnsafeCursor;", "next", "()I", true, okio_unsafe_cursor_next),
     ne!("Lokio/Buffer$UnsafeCursor;", "close", "()V", true, okio_unsafe_cursor_close),
     ne!("Lokio/Buffer;", "get", "(J)B", true, okio_buffer_get),
+    // wasm:
+    ne!(
+        "Lokio/Buffer;",
+        "copyTo",
+        "(Lokio/Buffer;JJ)Lokio/Buffer;",
+        true,
+        okio_buffer_copy_to
+    ),
+    ne!(
+        "Lokio/Buffer;",
+        "copyTo",
+        "(Lokio/Buffer;)Lokio/Buffer;",
+        true,
+        okio_buffer_copy_to_all
+    ),
+    ne!(
+        "Lokio/Buffer;",
+        "copyTo$default",
+        "(Lokio/Buffer;Lokio/Buffer;JJILjava/lang/Object;)Lokio/Buffer;",
+        false,
+        okio_buffer_copy_to_default
+    ),
     ne!(
         "Lokio/Buffer;",
         "<init>",

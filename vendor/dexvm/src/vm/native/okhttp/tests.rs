@@ -378,6 +378,7 @@ fn binary_body_plumbing() {
                 method: "GET".into(),
                 headers: Vec::new(),
                 body: None,
+                tags: Vec::new(), // wasm:
             },
         )
         .unwrap();
@@ -496,6 +497,7 @@ mod chain_tests {
                     method: String::new(),
                     headers: Vec::new(),
                     body: None,
+                    tags: Vec::new(), // wasm:
                 },
             )
             .unwrap();
@@ -539,6 +541,7 @@ mod chain_tests {
                     method: String::new(),
                     headers: Vec::new(),
                     body: None,
+                    tags: Vec::new(), // wasm:
                 },
             )
             .unwrap();

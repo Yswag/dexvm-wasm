@@ -50,6 +50,34 @@ fn biginteger_init_bytes(vm: &mut Vm, args: &[JValue]) -> R {
     set_this(vm, args[0], value)
 }
 
+// wasm: BigInteger(int signum, byte[] magnitude).
+fn biginteger_init_signum_bytes(vm: &mut Vm, args: &[JValue]) -> R {
+    let signum = int_of(vm, args[1]);
+    let bytes = match payload(vm, args[2]) {
+        Some(Native::Array(ArrayData::Byte(bs))) => bs.iter().map(|&b| b as u8).collect::<Vec<_>>(),
+        _ => return Err(npe(vm)),
+    };
+    let sign = match signum {
+        -1 => Sign::Minus,
+        0 => {
+            if bytes.iter().any(|&b| b != 0) {
+                return Err(NatErr::Throw(
+                    vm.err_nfe("signum-magnitude mismatch".to_string()),
+                ));
+            }
+            Sign::NoSign
+        }
+        1 => Sign::Plus,
+        _ => {
+            return Err(NatErr::Throw(
+                vm.err_nfe(format!("invalid signum: {signum}")),
+            ));
+        }
+    };
+    let value = BigInt::from_bytes_be(sign, &bytes);
+    set_this(vm, args[0], value)
+}
+
 fn biginteger_init_string(vm: &mut Vm, args: &[JValue]) -> R {
     let s = jstr(vm, args[1])?;
     let radix = if args.len() > 2 {
@@ -280,6 +308,14 @@ pub(crate) const TABLE: &[NativeEntry] = &[
         "([B)V",
         true,
         biginteger_init_bytes
+    ),
+    // wasm:
+    ne!(
+        "Ljava/math/BigInteger;",
+        "<init>",
+        "(I[B)V",
+        true,
+        biginteger_init_signum_bytes
     ),
     ne!(
         "Ljava/math/BigInteger;",

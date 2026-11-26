@@ -17,6 +17,7 @@ Update this table on every release. "Passing" means
 | 2026-11-26 | v0.2.5 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; direct coroutine dispatch for 1.6 `pages`/`popular`/`latest`/`search` (no spurious legacy `pageListRequest`/`*Request` calls), `ZonedDateTime.toLocalDate()` / `toLocalDateTime()` / `OffsetDateTime.toLocalDate()` / `LocalDateTime.toLocalDate()`; 25/25 unit tests pass |
 | 2026-11-26 | v0.2.6 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; new `headers` op, `imageRequest` header consistency & 0-fetch when `page.imageUrl` is set, `System.getProperty("http.agent")` Dalvik default, Jsoup `Element.children()` element-only + `MapsKt.getValue(JsonObject)` (GoDa `mangaUpdate` live), `Integer`/`Long` bit helpers, `fetchImage` 1-request fast path when `page.imageUrl` is set, `TimeZone.getID()`/`getRawOffset()`/`getOffset(long)`; 31/31 unit tests pass |
 | 2026-11-26 | v0.2.7 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; OkHttp `Request.Builder.tag(...)` / `Request.tag(...)` (`Class`, `KClass`, `Object`) preserved across `build()`/`newBuilder()`/interceptors so keiyoushi `BrowserHeaders` injects `Referer`/`Accept`/`Sec-Fetch-*`, plus `fetchImage` throws `HttpException: HTTP <code>` on non-2xx responses; 34/34 unit tests pass |
+| 2026-11-26 | v0.2.8 | 0.2.0 + patch | 1.6.1–1.6.72 | 25 fixtures (`test/fixtures/`, 22 ext-lib 1.6) | 25/25 open; `java.security` P-256 EC / `ECDH` (`KeyPairGenerator`, `AlgorithmParameters`, `ECParameterSpec`/`EllipticCurve`/`ECFieldFp`/`ECPoint`, `KeyFactory`, `KeyAgreement`), `BigInteger(int, byte[])`, `AES/CTR/NoPadding`, `AES-128-GCM`, `Mac.update`/`doFinal()`/`getMacLength()`, `okio.Buffer.copyTo`/`BufferedSource.readAll`, `HttpUrl.queryParameter` percent-decoding, `ArraysKt.takeLast`/`sort`; **`zh.bilibilimanga` v1.6.0 passes full live flow** (`popular` → `mangaUpdate` → `pages` → `fetchImage`, including encrypted `cpx` AVIF decryption to `ftypavif`); 40/40 unit tests pass |
 
 Raw output: `test/results/all.log` (1.4 baseline); run `node test/run.mjs 1.6`
 for the current 1.6 gate.
@@ -25,7 +26,7 @@ for the current 1.6 gate.
 
 | Generation | State | Missing |
 |---|---|---|
-| ext-lib **1.6.x** (current repo builds) | ✅ supported (17/22 gated fixtures pass full flow; 0 VM errors) | RSA/X509 crypto (manhuaren), site-side Cloudflare/gatekeepers (baozimanhua, Asura Scans, MoeTruyen) |
+| ext-lib **1.6.x** (current repo builds) | ✅ supported (17/22 gated fixtures + `zh.bilibilimanga` live pass full flow; 0 VM errors) | site-side Cloudflare/gatekeepers (baozimanhua, Asura Scans, MoeTruyen) |
 | ext-lib 1.4.x | ✅ works | — (Mihon 0.21 is the last major release supporting 1.4, and the repo stopped publishing it in 2026-10) |
 | ext-lib 1.5.x | untested | no APKs on hand |
 

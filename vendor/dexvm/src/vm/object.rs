@@ -359,10 +359,12 @@ pub enum Native {
         iterations: i32,
         key_len_bits: i32,
     },
-    /// javax.crypto.Mac: algorithm name + HMAC key.
+    /// javax.crypto.Mac: algorithm name + HMAC key + accumulated update bytes.
     Mac {
         algorithm: String,
         key: Vec<u8>,
+        // wasm: accumulated bytes from Mac.update(...) before no-arg doFinal().
+        buf: Vec<u8>,
     },
     /// java.util.zip.Inflater: accumulates `setInput` bytes, then
     /// decompresses in one shot on the first `inflate` call.
@@ -607,6 +609,50 @@ pub enum Native {
     },
     /// java.security.KeyFactory (algorithm string only).
     KeyFactory,
+    // wasm: EC / ECDH / KeyPair shims (secp256r1 / P-256).
+    KeyPairGenerator {
+        algo: String,
+        curve: String,
+    },
+    KeyPair {
+        public: JValue,
+        private: JValue,
+    },
+    EcGenParamSpec(String),
+    AlgorithmParams {
+        algo: String,
+        curve: Option<String>,
+    },
+    EcParamSpec(String),
+    EcCurve(String),
+    EcFieldFp(String),
+    EcPoint {
+        x: Vec<u8>,
+        y: Vec<u8>,
+    },
+    EcPublicKeySpec {
+        x: Vec<u8>,
+        y: Vec<u8>,
+        curve: String,
+    },
+    EcPrivateKeySpec {
+        s: Vec<u8>,
+        curve: String,
+    },
+    EcPublicKey {
+        x: Vec<u8>,
+        y: Vec<u8>,
+        curve: String,
+    },
+    EcPrivateKey {
+        s: Vec<u8>,
+        curve: String,
+    },
+    KeyAgreement {
+        algo: String,
+        priv_key: Option<Vec<u8>>,
+        shared: Option<Vec<u8>>,
+    },
     /// okhttp3.Timeout: configurable timeout values on a call.
     Timeout {
         millis: i64,
@@ -1031,6 +1077,11 @@ impl Native {
                 }
             }
             Native::Response { request, .. } => push(Some(request), out),
+            // wasm: trace KeyPair public/private key references.
+            Native::KeyPair { public, private } => {
+                push(Some(public), out);
+                push(Some(private), out);
+            }
             Native::SManga {
                 update_strategy,
                 memo,
@@ -1203,7 +1254,20 @@ impl Native {
             | Native::Type { .. }
             | Native::X509KeySpec(_)
             | Native::RsaPublicKey { .. }
-            | Native::KeyFactory => {}
+            | Native::KeyFactory
+            // wasm: EC / ECDH payloads without JValue references.
+            | Native::KeyPairGenerator { .. }
+            | Native::EcGenParamSpec(_)
+            | Native::AlgorithmParams { .. }
+            | Native::EcParamSpec(_)
+            | Native::EcCurve(_)
+            | Native::EcFieldFp(_)
+            | Native::EcPoint { .. }
+            | Native::EcPublicKeySpec { .. }
+            | Native::EcPrivateKeySpec { .. }
+            | Native::EcPublicKey { .. }
+            | Native::EcPrivateKey { .. }
+            | Native::KeyAgreement { .. } => {}
         }
     }
 }

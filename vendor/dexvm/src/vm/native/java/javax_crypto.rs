@@ -34,6 +34,7 @@ pub(crate) fn cipher_get_instance(vm: &mut Vm, args: &[JValue]) -> R {
     if !matches!(
         transformation.as_str(),
         "AES/GCM/NOPADDING"
+            | "AES/CTR/NOPADDING" // wasm:
             | "AES/CBC/PKCS5PADDING"
             | "AES/CBC/PKCS7PADDING"
             | "AES/CBC/NOPADDING"
@@ -269,6 +270,24 @@ fn aes_block_mode(
     Ok(out)
 }
 
+// wasm: AES/CTR/NoPadding (standard 128-bit big-endian counter increment, 16/24/32-byte keys).
+fn aes_ctr_mode(key: &[u8], iv: &[u8], input: &[u8]) -> Result<Vec<u8>, &'static str> {
+    if iv.len() != 16 {
+        return Err("AES-CTR IV must be 16 bytes");
+    }
+    let mut counter = u128::from_be_bytes(iv.try_into().map_err(|_| "bad AES-CTR IV")?);
+    let mut out = Vec::with_capacity(input.len());
+    for chunk in input.chunks(16) {
+        let mut ks = counter.to_be_bytes();
+        crypt_block(key, &mut ks, true).map_err(|_| "invalid AES key")?;
+        for (b, k) in chunk.iter().zip(ks.iter()) {
+            out.push(b ^ k);
+        }
+        counter = counter.wrapping_add(1);
+    }
+    Ok(out)
+}
+
 pub(crate) fn cipher_do_final(vm: &mut Vm, args: &[JValue]) -> R {
     let input = bytes_of(vm, args[1]).ok_or_else(|| npe(vm))?;
     let off = int_of(vm, args[2]).max(0) as usize;
@@ -309,10 +328,9 @@ pub(crate) fn cipher_do_final(vm: &mut Vm, args: &[JValue]) -> R {
         return byte_array(vm, out);
     }
     let out = if transformation == "AES/GCM/NOPADDING" {
-        let secret: [u8; 32] = key
-            .try_into()
-            .map_err(|_| iae(vm, "AES-GCM currently requires a 32-byte key"))?;
-        let gcm = crate::vm::crypto::Gcm::new(&secret);
+        // wasm: support 16/24/32-byte AES-GCM keys via Gcm::from_key.
+        let gcm = crate::vm::crypto::Gcm::from_key(&key)
+            .ok_or_else(|| iae(vm, "AES-GCM requires a 16, 24, or 32-byte key"))?;
         match mode {
             2 => gcm
                 .open(&iv, &aad, &input[off..end])
@@ -320,6 +338,12 @@ pub(crate) fn cipher_do_final(vm: &mut Vm, args: &[JValue]) -> R {
             1 => gcm.seal(&iv, &aad, &input[off..end]),
             _ => return Err(iae(vm, "unsupported cipher mode")),
         }
+    } else if transformation == "AES/CTR/NOPADDING" {
+        // wasm: AES/CTR/NoPadding (encrypt and decrypt are identical XOR with keystream).
+        if mode != 1 && mode != 2 {
+            return Err(iae(vm, "unsupported cipher mode"));
+        }
+        aes_ctr_mode(&key, &iv, &input[off..end]).map_err(|message| iae(vm, message))?
     } else {
         aes_block_mode(&transformation, mode, &key, &iv, &input[off..end])
             .map_err(|message| iae(vm, message))?
@@ -394,6 +418,7 @@ fn mac_get_instance(vm: &mut Vm, args: &[JValue]) -> R {
         Native::Mac {
             algorithm,
             key: Vec::new(),
+            buf: Vec::new(),
         },
     )
 }
@@ -403,11 +428,83 @@ fn mac_init(vm: &mut Vm, args: &[JValue]) -> R {
         Some(Native::Key(k)) => k.clone(),
         _ => return Err(npe(vm)),
     };
-    let Some(Native::Mac { key: dst, .. }) = payload_mut(vm, args[0]) else {
+    let Some(Native::Mac { key: dst, buf, .. }) = payload_mut(vm, args[0]) else {
         return Err(npe(vm));
     };
     *dst = key;
+    buf.clear();
     Ok(JValue::Null)
+}
+
+// wasm: Mac.update([B)V, update([BII)V, update(B)V, doFinal()[B.
+fn mac_update_bytes(vm: &mut Vm, args: &[JValue]) -> R {
+    let input = bytes_of(vm, args[1]).ok_or_else(|| npe(vm))?;
+    let Some(Native::Mac { buf, .. }) = payload_mut(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    buf.extend_from_slice(&input);
+    Ok(JValue::Null)
+}
+
+fn mac_update_range(vm: &mut Vm, args: &[JValue]) -> R {
+    let input = bytes_of(vm, args[1]).ok_or_else(|| npe(vm))?;
+    let off = int_of(vm, args[2]).max(0) as usize;
+    let len = int_of(vm, args[3]).max(0) as usize;
+    let end = off.saturating_add(len).min(input.len());
+    let Some(Native::Mac { buf, .. }) = payload_mut(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    buf.extend_from_slice(&input[off..end]);
+    Ok(JValue::Null)
+}
+
+fn mac_update_byte(vm: &mut Vm, args: &[JValue]) -> R {
+    let b = int_of(vm, args[1]) as u8;
+    let Some(Native::Mac { buf, .. }) = payload_mut(vm, args[0]) else {
+        return Err(npe(vm));
+    };
+    buf.push(b);
+    Ok(JValue::Null)
+}
+
+fn mac_compute(vm: &mut Vm, receiver: JValue, extra: &[u8]) -> R {
+    let (algorithm, key, mut data) = match payload_mut(vm, receiver) {
+        Some(Native::Mac {
+            algorithm,
+            key,
+            buf,
+        }) => {
+            let taken = std::mem::take(buf);
+            (algorithm.clone(), key.clone(), taken)
+        }
+        _ => return Err(npe(vm)),
+    };
+    data.extend_from_slice(extra);
+    let algo_upper = algorithm.to_ascii_uppercase();
+    let out = if algo_upper.contains("SHA256") {
+        let mut mac = <Hmac<Sha256> as HmacKeyInit>::new_from_slice(&key)
+            .map_err(|_| iae(vm, "invalid HMAC key"))?;
+        mac.update(&data);
+        mac.finalize().into_bytes().to_vec()
+    } else if algo_upper.contains("SHA512") {
+        let mut mac = <Hmac<Sha512> as HmacKeyInit>::new_from_slice(&key)
+            .map_err(|_| iae(vm, "invalid HMAC key"))?;
+        mac.update(&data);
+        mac.finalize().into_bytes().to_vec()
+    } else if algo_upper.contains("SHA1") {
+        let mut mac = <Hmac<Sha1> as HmacKeyInit>::new_from_slice(&key)
+            .map_err(|_| iae(vm, "invalid HMAC key"))?;
+        mac.update(&data);
+        mac.finalize().into_bytes().to_vec()
+    } else if algo_upper.contains("MD5") {
+        let mut mac = <Hmac<md5::Md5> as HmacKeyInit>::new_from_slice(&key)
+            .map_err(|_| iae(vm, "invalid HMAC key"))?;
+        mac.update(&data);
+        mac.finalize().into_bytes().to_vec()
+    } else {
+        return Err(iae(vm, format!("unsupported Mac algorithm {algorithm}")));
+    };
+    byte_array(vm, out)
 }
 
 fn mac_get_algorithm(vm: &mut Vm, args: &[JValue]) -> R {
@@ -418,37 +515,35 @@ fn mac_get_algorithm(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(new_str(vm, &algorithm))
 }
 
-fn mac_do_final(vm: &mut Vm, args: &[JValue]) -> R {
-    let input = bytes_of(vm, args[1]).ok_or_else(|| npe(vm))?;
-    let (algorithm, key) = match payload(vm, args[0]) {
-        Some(Native::Mac { algorithm, key }) => (algorithm.clone(), key.clone()),
+// wasm: Mac.getMacLength()I (used by Ece.hkdf).
+fn mac_get_mac_length(vm: &mut Vm, args: &[JValue]) -> R {
+    let algorithm = match payload(vm, args[0]) {
+        Some(Native::Mac { algorithm, .. }) => algorithm.to_ascii_uppercase(),
         _ => return Err(npe(vm)),
     };
-    let algo_upper = algorithm.to_ascii_uppercase();
-    let out = if algo_upper.contains("SHA256") {
-        let mut mac = <Hmac<Sha256> as HmacKeyInit>::new_from_slice(&key)
-            .map_err(|_| iae(vm, "invalid HMAC key"))?;
-        mac.update(&input);
-        mac.finalize().into_bytes().to_vec()
-    } else if algo_upper.contains("SHA512") {
-        let mut mac = <Hmac<Sha512> as HmacKeyInit>::new_from_slice(&key)
-            .map_err(|_| iae(vm, "invalid HMAC key"))?;
-        mac.update(&input);
-        mac.finalize().into_bytes().to_vec()
-    } else if algo_upper.contains("SHA1") {
-        let mut mac = <Hmac<Sha1> as HmacKeyInit>::new_from_slice(&key)
-            .map_err(|_| iae(vm, "invalid HMAC key"))?;
-        mac.update(&input);
-        mac.finalize().into_bytes().to_vec()
-    } else if algo_upper.contains("MD5") {
-        let mut mac = <Hmac<md5::Md5> as HmacKeyInit>::new_from_slice(&key)
-            .map_err(|_| iae(vm, "invalid HMAC key"))?;
-        mac.update(&input);
-        mac.finalize().into_bytes().to_vec()
+    let len = if algorithm.contains("SHA512") {
+        64
+    } else if algorithm.contains("SHA384") {
+        48
+    } else if algorithm.contains("SHA256") {
+        32
+    } else if algorithm.contains("SHA1") {
+        20
+    } else if algorithm.contains("MD5") {
+        16
     } else {
-        return Err(iae(vm, format!("unsupported Mac algorithm {algorithm}")));
+        32
     };
-    byte_array(vm, out)
+    Ok(JValue::Int(len))
+}
+
+fn mac_do_final(vm: &mut Vm, args: &[JValue]) -> R {
+    let input = bytes_of(vm, args[1]).ok_or_else(|| npe(vm))?;
+    mac_compute(vm, args[0], &input)
+}
+
+fn mac_do_final_empty(vm: &mut Vm, args: &[JValue]) -> R {
+    mac_compute(vm, args[0], &[])
 }
 
 pub(crate) const JAVAX_CRYPTO_TABLE: &[NativeEntry] = &[
@@ -557,12 +652,49 @@ pub(crate) const JAVAX_CRYPTO_TABLE: &[NativeEntry] = &[
         true,
         mac_get_algorithm
     ),
+    // wasm:
+    ne!(
+        "Ljavax/crypto/Mac;",
+        "getMacLength",
+        "()I",
+        true,
+        mac_get_mac_length
+    ),
     ne!(
         "Ljavax/crypto/Mac;",
         "doFinal",
         "([B)[B",
         true,
         mac_do_final
+    ),
+    // wasm:
+    ne!(
+        "Ljavax/crypto/Mac;",
+        "doFinal",
+        "()[B",
+        true,
+        mac_do_final_empty
+    ),
+    ne!(
+        "Ljavax/crypto/Mac;",
+        "update",
+        "([B)V",
+        true,
+        mac_update_bytes
+    ),
+    ne!(
+        "Ljavax/crypto/Mac;",
+        "update",
+        "([BII)V",
+        true,
+        mac_update_range
+    ),
+    ne!(
+        "Ljavax/crypto/Mac;",
+        "update",
+        "(B)V",
+        true,
+        mac_update_byte
     ),
 ];
 

@@ -6,12 +6,29 @@
 //! is implemented here on top of the raw AES block cipher.
 
 use aes::cipher::{BlockEncrypt, KeyInit};
-use aes::Aes256;
+use aes::{Aes128, Aes192, Aes256};
 
-/// AES-256-GCM context.
+// wasm: generalize Gcm to support 16/24/32-byte AES keys (AES-128/192/256-GCM).
+enum AesCipher {
+    Aes128(Aes128),
+    Aes192(Aes192),
+    Aes256(Aes256),
+}
+
+impl AesCipher {
+    fn encrypt_block(&self, block: &mut [u8; 16]) {
+        match self {
+            AesCipher::Aes128(c) => c.encrypt_block(block.into()),
+            AesCipher::Aes192(c) => c.encrypt_block(block.into()),
+            AesCipher::Aes256(c) => c.encrypt_block(block.into()),
+        }
+    }
+}
+
+/// AES-GCM context (128/192/256-bit key).
 pub struct Gcm {
     h: u128,
-    cipher: Aes256,
+    cipher: AesCipher,
 }
 
 fn mul(x: u128, y: u128) -> u128 {
@@ -55,13 +72,23 @@ fn inc32(j0: u128) -> u128 {
 
 impl Gcm {
     pub fn new(secret: &[u8; 32]) -> Self {
-        let cipher = Aes256::new_from_slice(secret).expect("32-byte AES key");
+        Self::from_key(secret).expect("32-byte AES key")
+    }
+
+    // wasm: construct AES-128/192/256-GCM from 16, 24, or 32-byte key.
+    pub fn from_key(secret: &[u8]) -> Option<Self> {
+        let cipher = match secret.len() {
+            16 => AesCipher::Aes128(Aes128::new_from_slice(secret).ok()?),
+            24 => AesCipher::Aes192(Aes192::new_from_slice(secret).ok()?),
+            32 => AesCipher::Aes256(Aes256::new_from_slice(secret).ok()?),
+            _ => return None,
+        };
         let mut zero = [0u8; 16];
-        cipher.encrypt_block((&mut zero).into());
-        Gcm {
+        cipher.encrypt_block(&mut zero);
+        Some(Gcm {
             h: u128::from_be_bytes(zero),
             cipher,
-        }
+        })
     }
 
     /// The initial counter block `J0` (SP 800-38D, NIST SP 800-38D 7.1).
@@ -83,7 +110,7 @@ impl Gcm {
 
     fn block(&self, counter: u128) -> [u8; 16] {
         let mut c = counter.to_be_bytes();
-        self.cipher.encrypt_block((&mut c).into());
+        self.cipher.encrypt_block(&mut c);
         c
     }
 

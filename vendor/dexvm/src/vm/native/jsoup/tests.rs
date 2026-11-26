@@ -377,6 +377,7 @@ fn parse_from_response_seam() {
                 method: "GET".into(),
                 headers: Vec::new(),
                 body: None,
+                tags: Vec::new(), // wasm:
             },
         )
         .unwrap();

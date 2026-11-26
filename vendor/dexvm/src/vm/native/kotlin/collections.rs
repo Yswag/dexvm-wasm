@@ -1150,6 +1150,94 @@ pub(super) fn arrayskt_bytes_to_list(vm: &mut Vm, args: &[JValue]) -> R {
     list_alloc(vm, items)
 }
 
+// wasm: ArraysKt.takeLast/dropLast/take/drop(byte[], int) -> List<Byte>.
+pub(super) fn arrayskt_bytes_take_last(vm: &mut Vm, args: &[JValue]) -> R {
+    let n = int_of(vm, args[1]);
+    if n < 0 {
+        return Err(iae(vm, "Requested element count is less than zero."));
+    }
+    let bytes = match payload(vm, args[0]) {
+        Some(Native::Array(ArrayData::Byte(values))) => values.clone(),
+        _ => return Err(npe(vm)),
+    };
+    let start = bytes.len().saturating_sub(n as usize);
+    let mut items = Vec::with_capacity(bytes.len() - start);
+    for &b in &bytes[start..] {
+        items.push(boxed(vm, "Ljava/lang/Byte;", Native::ByteBox(b))?);
+    }
+    list_alloc(vm, items)
+}
+
+pub(super) fn arrayskt_bytes_drop_last(vm: &mut Vm, args: &[JValue]) -> R {
+    let n = int_of(vm, args[1]);
+    if n < 0 {
+        return Err(iae(vm, "Requested element count is less than zero."));
+    }
+    let bytes = match payload(vm, args[0]) {
+        Some(Native::Array(ArrayData::Byte(values))) => values.clone(),
+        _ => return Err(npe(vm)),
+    };
+    let end = bytes.len().saturating_sub(n as usize);
+    let mut items = Vec::with_capacity(end);
+    for &b in &bytes[..end] {
+        items.push(boxed(vm, "Ljava/lang/Byte;", Native::ByteBox(b))?);
+    }
+    list_alloc(vm, items)
+}
+
+pub(super) fn arrayskt_bytes_take(vm: &mut Vm, args: &[JValue]) -> R {
+    let n = int_of(vm, args[1]);
+    if n < 0 {
+        return Err(iae(vm, "Requested element count is less than zero."));
+    }
+    let bytes = match payload(vm, args[0]) {
+        Some(Native::Array(ArrayData::Byte(values))) => values.clone(),
+        _ => return Err(npe(vm)),
+    };
+    let end = (n as usize).min(bytes.len());
+    let mut items = Vec::with_capacity(end);
+    for &b in &bytes[..end] {
+        items.push(boxed(vm, "Ljava/lang/Byte;", Native::ByteBox(b))?);
+    }
+    list_alloc(vm, items)
+}
+
+pub(super) fn arrayskt_bytes_drop(vm: &mut Vm, args: &[JValue]) -> R {
+    let n = int_of(vm, args[1]);
+    if n < 0 {
+        return Err(iae(vm, "Requested element count is less than zero."));
+    }
+    let bytes = match payload(vm, args[0]) {
+        Some(Native::Array(ArrayData::Byte(values))) => values.clone(),
+        _ => return Err(npe(vm)),
+    };
+    let start = (n as usize).min(bytes.len());
+    let mut items = Vec::with_capacity(bytes.len() - start);
+    for &b in &bytes[start..] {
+        items.push(boxed(vm, "Ljava/lang/Byte;", Native::ByteBox(b))?);
+    }
+    list_alloc(vm, items)
+}
+
+// wasm: ArraysKt.sort([I)V / ([J)V / ([B)V.
+pub(super) fn arrayskt_sort_ints(vm: &mut Vm, args: &[JValue]) -> R {
+    match payload_mut(vm, args[0]) {
+        Some(Native::Array(ArrayData::Int(v))) => {
+            v.sort();
+            Ok(JValue::Null)
+        }
+        Some(Native::Array(ArrayData::Long(v))) => {
+            v.sort();
+            Ok(JValue::Null)
+        }
+        Some(Native::Array(ArrayData::Byte(v))) => {
+            v.sort();
+            Ok(JValue::Null)
+        }
+        _ => Err(npe(vm)),
+    }
+}
+
 pub(super) fn arrayskt_copy_of_range_ints(vm: &mut Vm, args: &[JValue]) -> R {
     let from = int_of(vm, args[1]).max(0) as usize;
     let to = int_of(vm, args[2]).max(0) as usize;
@@ -1510,6 +1598,14 @@ pub(crate) const TABLE: &[NativeEntry] = &[
     ne!("Lkotlin/collections/CollectionsKt;", "joinTo$default", "(Ljava/lang/Iterable;Ljava/lang/Appendable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/Appendable;", false, collections_join_to_string_default),
     ne!("Lkotlin/collections/ArraysKt;", "copyOfRange", "([BII)[B", false, arrayskt_copy_of_range),
     ne!("Lkotlin/collections/ArraysKt;", "toList", "([I)Ljava/util/List;", false, arrayskt_int_to_list),
+    // wasm:
+    ne!("Lkotlin/collections/ArraysKt;", "takeLast", "([BI)Ljava/util/List;", false, arrayskt_bytes_take_last),
+    ne!("Lkotlin/collections/ArraysKt;", "dropLast", "([BI)Ljava/util/List;", false, arrayskt_bytes_drop_last),
+    ne!("Lkotlin/collections/ArraysKt;", "take", "([BI)Ljava/util/List;", false, arrayskt_bytes_take),
+    ne!("Lkotlin/collections/ArraysKt;", "drop", "([BI)Ljava/util/List;", false, arrayskt_bytes_drop),
+    ne!("Lkotlin/collections/ArraysKt;", "sort", "([I)V", false, arrayskt_sort_ints),
+    ne!("Lkotlin/collections/ArraysKt;", "sort", "([J)V", false, arrayskt_sort_ints),
+    ne!("Lkotlin/collections/ArraysKt;", "sort", "([B)V", false, arrayskt_sort_ints),
     ne!(
         "Lkotlin/collections/CollectionsKt;",
         "asSequence",
