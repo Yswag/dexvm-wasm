@@ -1423,6 +1423,7 @@ impl Keiyoushi {
                 method: "GET".to_string(),
                 headers,
                 body: None,
+                tags: Vec::new(),
             }),
         ));
         let call = self.ctx.invoke_on(
@@ -1435,6 +1436,14 @@ impl Keiyoushi {
             .ctx
             .invoke_on(call.as_obj(), "execute", "()Lokhttp3/Response;", &[])?;
         match self.ctx.vm().payload_of(resp) {
+            Some(Native::Response { code, .. }) if !(200..300).contains(&code) => {
+                // wasm: mirror Mihon HttpSource.getImage (`awaitSuccess`): fail on non-2xx.
+                let ex = self
+                    .ctx
+                    .vm()
+                    .throwable_of("Leu/kanade/tachiyomi/network/HttpException;", &format!("HTTP {code}"));
+                Err(JvmError::Uncaught(ex))
+            }
             Some(Native::Response { body: Some(b), .. }) => Ok(b.clone()),
             Some(Native::Response { body: None, .. }) => Ok(Vec::new()),
             _ => Err(JvmError::Resolution(

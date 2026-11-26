@@ -577,6 +577,7 @@ fn http_source_get_request(vm: &mut Vm, src: JValue, obj: JValue) -> R {
             method: "GET".into(),
             headers,
             body: None,
+            tags: Vec::new(),
         },
     )
 }
@@ -634,6 +635,7 @@ pub(crate) fn http_source_image_url_request(vm: &mut Vm, args: &[JValue]) -> R {
             method: "GET".into(),
             headers,
             body: None,
+            tags: Vec::new(),
         },
     )
 }
@@ -654,6 +656,7 @@ pub(crate) fn http_source_image_request(vm: &mut Vm, args: &[JValue]) -> R {
             method: "GET".into(),
             headers,
             body: None,
+            tags: Vec::new(),
         },
     )
 }
@@ -1632,6 +1635,7 @@ pub(crate) fn requests_kt_get_default(vm: &mut Vm, args: &[JValue]) -> R {
             method: "GET".into(),
             headers,
             body: None,
+            tags: Vec::new(),
         },
     )
 }
@@ -1675,6 +1679,7 @@ pub(crate) fn requests_kt_post_default(vm: &mut Vm, args: &[JValue]) -> R {
             method: "POST".into(),
             headers,
             body: Some(body),
+            tags: Vec::new(),
         },
     )
 }

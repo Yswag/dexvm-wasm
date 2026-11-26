@@ -29,6 +29,7 @@ pub(crate) fn request_builder_init(vm: &mut Vm, _args: &[JValue]) -> R {
             method: "GET".into(),
             headers: Vec::new(),
             body: None,
+            tags: Vec::new(),
         },
     )
 }
@@ -85,8 +86,39 @@ pub(crate) fn request_builder_add_header(vm: &mut Vm, args: &[JValue]) -> R {
     builder_set_header(vm, args, false)
 }
 
-pub(crate) fn request_builder_tag(_vm: &mut Vm, args: &[JValue]) -> R {
-    Ok(args[0])
+// wasm: canonical tag key string for OkHttp Request.tag(Class / KClass) lookup.
+fn request_tag_key(vm: &Vm, key: JValue) -> Option<String> {
+    use crate::vm::object::ClassOrPrim;
+    match payload(vm, key) {
+        Some(Native::ClassObj(ClassOrPrim::Class(cid))) => {
+            Some(vm.str_of(vm.classes[*cid as usize].descriptor).to_string())
+        }
+        Some(Native::ClassObj(ClassOrPrim::Primitive(b))) => Some((*b as char).to_string()),
+        _ => match key {
+            JValue::Obj(id) => {
+                let cid = vm.arena.objects[id as usize].class;
+                Some(vm.str_of(vm.classes[cid as usize].descriptor).to_string())
+            }
+            _ => None,
+        },
+    }
+}
+
+// wasm: store or remove a tag entry on Request$Builder.
+fn request_builder_set_tag(vm: &mut Vm, builder: JValue, key: String, val: JValue) -> R {
+    let Some(Native::RequestBuilder { tags, .. }) = payload_mut(vm, builder) else {
+        return Err(npe(vm));
+    };
+    tags.retain(|(k, _)| k != &key);
+    if !val.is_null_ref() {
+        tags.push((key, val));
+    }
+    Ok(builder)
+}
+
+pub(crate) fn request_builder_tag(vm: &mut Vm, args: &[JValue]) -> R {
+    // wasm: Request.Builder.tag(tag: Any?) -> tag(Object.class, tag).
+    request_builder_set_tag(vm, args[0], "Ljava/lang/Object;".to_string(), args[1])
 }
 
 /// `Request$Builder.headers(Headers)` — copy all headers from the Headers
@@ -97,7 +129,8 @@ pub(crate) fn request_builder_headers(vm: &mut Vm, args: &[JValue]) -> R {
         _ => return Err(npe(vm)),
     };
     match payload_mut(vm, args[0]) {
-        Some(Native::RequestBuilder { headers, .. }) => headers.extend(src),
+        // wasm: OkHttp Request.Builder.headers(Headers) replaces all headers (not extend).
+        Some(Native::RequestBuilder { headers, .. }) => *headers = src,
         _ => return Err(npe(vm)),
     }
     Ok(args[0])
@@ -132,18 +165,27 @@ pub(crate) fn request_builder_cache_control(vm: &mut Vm, args: &[JValue]) -> R {
     Ok(args[0])
 }
 
-pub(crate) fn request_builder_tag2(_vm: &mut Vm, args: &[JValue]) -> R {
-    Ok(args[0])
+pub(crate) fn request_builder_tag2(vm: &mut Vm, args: &[JValue]) -> R {
+    // wasm: Request.Builder.tag(type: Class<T> | KClass<T>, tag: T?).
+    let key = request_tag_key(vm, args[1]).ok_or_else(|| npe(vm))?;
+    request_builder_set_tag(vm, args[0], key, args[2])
 }
 
 pub(crate) fn request_builder_build(vm: &mut Vm, args: &[JValue]) -> R {
-    let (url, method, headers, body) = match payload(vm, args[0]) {
+    let (url, method, headers, body, tags) = match payload(vm, args[0]) {
         Some(Native::RequestBuilder {
             url,
             method,
             headers,
             body,
-        }) => (url.clone(), method.clone(), headers.clone(), *body),
+            tags,
+        }) => (
+            url.clone(),
+            method.clone(),
+            headers.clone(),
+            *body,
+            tags.clone(),
+        ),
         _ => return Err(npe(vm)),
     };
     alloc(
@@ -154,6 +196,7 @@ pub(crate) fn request_builder_build(vm: &mut Vm, args: &[JValue]) -> R {
             method,
             headers,
             body,
+            tags,
         },
     )
 }
@@ -190,13 +233,20 @@ pub(crate) fn request_header(vm: &mut Vm, args: &[JValue]) -> R {
 }
 
 pub(crate) fn request_new_builder(vm: &mut Vm, args: &[JValue]) -> R {
-    let (url, method, headers, body) = match payload(vm, args[0]) {
+    let (url, method, headers, body, tags) = match payload(vm, args[0]) {
         Some(Native::Request {
             url,
             method,
             headers,
             body,
-        }) => (url.clone(), method.clone(), headers.clone(), *body),
+            tags,
+        }) => (
+            url.clone(),
+            method.clone(),
+            headers.clone(),
+            *body,
+            tags.clone(),
+        ),
         _ => return Err(npe(vm)),
     };
     alloc(
@@ -207,12 +257,43 @@ pub(crate) fn request_new_builder(vm: &mut Vm, args: &[JValue]) -> R {
             method,
             headers,
             body,
+            tags,
         },
     )
 }
 
-pub(crate) fn request_tag(_vm: &mut Vm, _args: &[JValue]) -> R {
-    Ok(JValue::Null)
+pub(crate) fn request_tag(vm: &mut Vm, args: &[JValue]) -> R {
+    // wasm: Request.tag() -> Object.class; Request.tag(Class / KClass) -> lookup by descriptor.
+    let key = if args.len() >= 2 {
+        request_tag_key(vm, args[1]).ok_or_else(|| npe(vm))?
+    } else {
+        "Ljava/lang/Object;".to_string()
+    };
+    match payload(vm, args[0]) {
+        Some(Native::Request { tags, .. }) => Ok(tags
+            .iter()
+            .find(|(k, _)| k == &key)
+            .map(|(_, v)| *v)
+            .unwrap_or(JValue::Null)),
+        _ => Err(npe(vm)),
+    }
+}
+
+// wasm: HttpUrl.Builder.username/password/encodedUsername/encodedPassword (strip userinfo).
+pub(crate) fn okhttp_http_url_builder_userinfo(_vm: &mut Vm, args: &[JValue]) -> R {
+    Ok(args[0])
+}
+
+// wasm: HttpUrl.Companion.defaultPort(scheme: String): Int (80 for http, 443 for https, -1 otherwise).
+pub(crate) fn okhttp_http_url_default_port(vm: &mut Vm, args: &[JValue]) -> R {
+    let scheme_arg = if args.len() >= 2 { args[1] } else { args[0] };
+    let scheme = jstr(vm, scheme_arg)?;
+    let port = match scheme.to_ascii_lowercase().as_str() {
+        "http" => 80,
+        "https" => 443,
+        _ => -1,
+    };
+    Ok(JValue::Int(port))
 }
 
 pub(crate) fn headers_builder_init(vm: &mut Vm, _args: &[JValue]) -> R {
@@ -692,6 +773,7 @@ pub(crate) fn user_agent_interceptor_intercept(vm: &mut Vm, args: &[JValue]) -> 
                 method,
                 mut headers,
                 body,
+                tags,
             }) = payload(vm, request).cloned()
             else {
                 return Err(npe(vm));
@@ -706,6 +788,7 @@ pub(crate) fn user_agent_interceptor_intercept(vm: &mut Vm, args: &[JValue]) -> 
                     method,
                     headers,
                     body,
+                    tags,
                 },
             )?
         } else {
@@ -1670,11 +1753,14 @@ pub(crate) fn headers_iterator(vm: &mut Vm, args: &[JValue]) -> R {
         Some(Native::Headers(headers)) => headers.clone(),
         _ => return Err(npe(vm)),
     };
-    let lines: Vec<JValue> = headers
-        .iter()
-        .map(|(k, v)| vm.alloc_string(&format!("{k}: {v}")))
-        .collect();
-    let list = list_alloc(vm, lines)?;
+    // wasm: OkHttp Headers implements Iterable<Pair<String, String>>.
+    let mut pairs = Vec::with_capacity(headers.len());
+    for (k, v) in headers {
+        let ks = vm.alloc_string(&k);
+        let vs = vm.alloc_string(&v);
+        pairs.push(alloc(vm, "Lkotlin/Pair;", Native::Pair(ks, vs))?);
+    }
+    let list = list_alloc(vm, pairs)?;
     alloc(
         vm,
         "Ljava/util/Iterator;",
@@ -2784,13 +2870,31 @@ pub(crate) fn response_new_builder(vm: &mut Vm, args: &[JValue]) -> R {
         code,
         message,
         headers,
+        body,
         request,
-        ..
+        prior,
     }) = payload(vm, args[0])
     else {
         return Err(npe(vm));
     };
-    let (code, message, headers, request) = (*code, message.clone(), headers.clone(), *request);
+    let (code, message, headers, body_bytes, request, prior) = (
+        *code,
+        message.clone(),
+        headers.clone(),
+        body.clone(),
+        *request,
+        *prior,
+    );
+    // wasm: OkHttp Response.newBuilder() preserves body and priorResponse!
+    let body_obj = match body_bytes {
+        Some(bytes) => Some(alloc(
+            vm,
+            "Lokhttp3/ResponseBody;",
+            Native::RespBody(bytes),
+        )?),
+        None => None,
+    };
+    let prior_opt = if prior.is_null_ref() { None } else { Some(prior) };
     alloc(
         vm,
         "Lokhttp3/Response$Builder;",
@@ -2798,9 +2902,9 @@ pub(crate) fn response_new_builder(vm: &mut Vm, args: &[JValue]) -> R {
             code,
             message,
             headers,
-            body: None,
+            body: body_obj,
             request: Some(request),
-            prior: None,
+            prior: prior_opt,
         },
     )
 }
@@ -2995,12 +3099,26 @@ pub(crate) const OKHTTP_TABLE: &[NativeEntry] = &[
     ne!("Lokhttp3/FormBody$Builder;", "add", "(Ljava/lang/String;Ljava/lang/String;)Lokhttp3/FormBody$Builder;", true, okhttp_form_builder_add),
     ne!("Lokhttp3/FormBody$Builder;", "build", "()Lokhttp3/FormBody;", true, okhttp_form_builder_build),
     ne!("Lokhttp3/HttpUrl$Companion;", "parse", "(Ljava/lang/String;)Lokhttp3/HttpUrl;", true, okhttp_http_url_parse),
+    // wasm:
+    ne!("Lokhttp3/HttpUrl$Companion;", "defaultPort", "(Ljava/lang/String;)I", true, okhttp_http_url_default_port),
+    // wasm:
+    ne!("Lokhttp3/HttpUrl;", "defaultPort", "(Ljava/lang/String;)I", false, okhttp_http_url_default_port),
     ne!("Lokhttp3/HttpUrl;", "newBuilder", "()Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_new_builder),
     ne!("Lokhttp3/HttpUrl$Builder;", "addQueryParameter", "(Ljava/lang/String;Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_add_query),
     ne!("Lokhttp3/HttpUrl$Builder;", "addPathSegment", "(Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_add_path_segment),
     ne!("Lokhttp3/HttpUrl$Builder;", "addPathSegments", "(Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_add_path_segments),
     ne!("Lokhttp3/HttpUrl$Builder;", "setPathSegment", "(ILjava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_set_path_segment),
     ne!("Lokhttp3/HttpUrl$Builder;", "fragment", "(Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_fragment),
+    // wasm:
+    ne!("Lokhttp3/HttpUrl$Builder;", "encodedFragment", "(Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_fragment),
+    // wasm:
+    ne!("Lokhttp3/HttpUrl$Builder;", "username", "(Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_userinfo),
+    // wasm:
+    ne!("Lokhttp3/HttpUrl$Builder;", "password", "(Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_userinfo),
+    // wasm:
+    ne!("Lokhttp3/HttpUrl$Builder;", "encodedUsername", "(Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_userinfo),
+    // wasm:
+    ne!("Lokhttp3/HttpUrl$Builder;", "encodedPassword", "(Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_userinfo),
     ne!("Lokhttp3/RequestBody$Companion;", "create", "(Ljava/lang/String;Lokhttp3/MediaType;)Lokhttp3/RequestBody;", true, request_body_create_string),
     ne!("Lokhttp3/Request$Builder;", "post", "(Lokhttp3/RequestBody;)Lokhttp3/Request$Builder;", true, request_builder_post),
     ne!("Lokhttp3/HttpUrl$Builder;", "addEncodedQueryParameter", "(Ljava/lang/String;Ljava/lang/String;)Lokhttp3/HttpUrl$Builder;", true, okhttp_http_url_builder_add_query),

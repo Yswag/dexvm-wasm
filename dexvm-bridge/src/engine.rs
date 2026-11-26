@@ -445,6 +445,7 @@ fn image_response(
                         method: "GET".to_string(),
                         headers,
                         body: None,
+                        tags: Vec::new(),
                     }),
                 );
                 JValue::Obj(inst)
@@ -496,11 +497,14 @@ fn request_headers(k: &mut Keiyoushi, req: JValue) -> Option<Vec<(String, String
     }
 }
 
-fn response_bytes(k: &mut Keiyoushi, resp: JValue) -> Option<Vec<u8>> {
+fn response_bytes(k: &mut Keiyoushi, resp: JValue) -> Result<Vec<u8>, String> {
     match k.ctx().vm().payload_of(resp) {
-        Some(Native::Response { body: Some(b), .. }) => Some(b.clone()),
-        Some(Native::Response { body: None, .. }) => Some(Vec::new()),
-        _ => None,
+        Some(Native::Response { code, .. }) if !(200..300).contains(&code) => {
+            Err(format!("uncaught eu.kanade.tachiyomi.network.HttpException: HTTP {code}"))
+        }
+        Some(Native::Response { body: Some(b), .. }) => Ok(b.clone()),
+        Some(Native::Response { body: None, .. }) => Ok(Vec::new()),
+        _ => Err("image request did not yield a Response payload".to_string()),
     }
 }
 
@@ -1038,15 +1042,16 @@ fn op_fetch_image(e: &mut Engine, req: &Value) -> R<Value> {
     LAST_CONTENT_TYPE.with(|c| *c.borrow_mut() = None);
     DEFAULT_REFERER.with(|c| *c.borrow_mut() = base_url_of(&mut e.k, &src));
     take_http_error();
-    let bytes = match image_response(&mut e.k, &src, &page, &url)
-        .ok()
-        .and_then(|resp| response_bytes(&mut e.k, resp))
-    {
-        Some(b) => b,
-        None => match e.k.image_data(&src, &url) {
+    let bytes = match image_response(&mut e.k, &src, &page, &url) {
+        Ok(resp) => match response_bytes(&mut e.k, resp) {
+            Ok(b) => b,
+            Err(msg) => return Err(fail(e, "java", msg)),
+        },
+        Err(JvmError::Resolution(_)) => match e.k.image_data(&src, &url) {
             Ok(b) => b,
             Err(er) => return Err(java_err(&mut e.k, er)),
         },
+        Err(er) => return Err(java_err(&mut e.k, er)),
     };
     let mime = LAST_CONTENT_TYPE.with(|c| c.borrow_mut().take());
     Ok(json!({

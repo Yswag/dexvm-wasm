@@ -175,6 +175,7 @@ pub(crate) fn request_parts(vm: &mut Vm, v: JValue) -> Result<RequestParts, NatE
         method,
         headers,
         body,
+        ..
     }) = payload(vm, v)
     else {
         return Err(npe(vm));
@@ -544,6 +545,7 @@ pub(crate) fn default_native_for(vm: &mut Vm, id: u32) -> Option<Native> {
                 method: String::new(),
                 headers: Vec::new(),
                 body: None,
+                tags: Vec::new(),
             }),
             "Ljava/util/HashMap;" | "Ljava/util/LinkedHashMap;" => Some(Native::Map(Vec::new())),
             "Ljava/util/concurrent/ConcurrentHashMap;" => Some(Native::Map(Vec::new())),

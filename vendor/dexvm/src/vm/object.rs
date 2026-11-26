@@ -533,6 +533,8 @@ pub enum Native {
         method: String,
         headers: Vec<(String, String)>,
         body: Option<JValue>,
+        // wasm: OkHttp Request.tag(Class/KClass) entries preserved through newBuilder()/build()/interceptors.
+        tags: Vec<(String, JValue)>,
     },
     /// okhttp3.Request$Builder under construction.
     RequestBuilder {
@@ -540,6 +542,8 @@ pub enum Native {
         method: String,
         headers: Vec<(String, String)>,
         body: Option<JValue>,
+        // wasm:
+        tags: Vec<(String, JValue)>,
     },
     /// okhttp3.Headers / Headers$Builder: name/value pairs.
     Headers(Vec<(String, String)>),
@@ -1014,8 +1018,18 @@ impl Native {
                 push(body.as_ref(), out);
                 push(request.as_ref(), out);
             }
-            Native::Request { body, .. } => push(body.as_ref(), out),
-            Native::RequestBuilder { body, .. } => push(body.as_ref(), out),
+            Native::Request { body, tags, .. } => {
+                push(body.as_ref(), out);
+                for (_, v) in tags {
+                    push(Some(v), out);
+                }
+            }
+            Native::RequestBuilder { body, tags, .. } => {
+                push(body.as_ref(), out);
+                for (_, v) in tags {
+                    push(Some(v), out);
+                }
+            }
             Native::Response { request, .. } => push(Some(request), out),
             Native::SManga {
                 update_strategy,
